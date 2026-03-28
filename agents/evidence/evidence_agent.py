@@ -90,17 +90,27 @@ class EvidenceAgent(BaseAgent[EvidenceResult]):
     # Public interface — overrides BaseAgent.run to accept specialist_results
     # ---------------------------------------------------------------------------
 
-    async def run(  # type: ignore[override]
+    async def run(
         self,
         case: CaseObject,
-        specialist_results: list[SpecialistResult],
+        specialist_results: list[SpecialistResult] | None = None,
     ) -> EvidenceResult:
         """Run evidence grounding and return an ``EvidenceResult``.
 
-        Overrides ``BaseAgent.run`` to accept the additional
-        ``specialist_results`` argument. Timing and structured logging mirror
-        the base implementation so observability is consistent across all agents.
+        Parameters
+        ----------
+        case:
+            The patient case.
+        specialist_results:
+            Required. Output from all specialist agents. Passing ``None``
+            raises ``ValueError`` immediately so callers get a clear error
+            rather than a silent no-op.
         """
+        if specialist_results is None:
+            raise ValueError(
+                "EvidenceAgent.run requires specialist_results; "
+                "call agent.run(case, specialist_results) not agent.run(case)"
+            )
         start = time.monotonic()
         log = logger.bind(agent=self.name, domain=self.domain, model=self.model)
         log.info("agent.start", case_id=case.case_id)

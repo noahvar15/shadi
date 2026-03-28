@@ -4,8 +4,8 @@ Sequence:
   1. Fan-out: dispatch CaseObject to all 4 specialist agents concurrently
   2. Evidence grounding: each specialist result is cross-checked
   3. A2A debate: one round of structured ENDORSE/CHALLENGE/MODIFY messages
-  4. Safety veto: block unsafe recommendations before synthesis
-  5. Output synthesis: produce DifferentialReport
+  4. Output synthesis: produce a preliminary DifferentialReport
+  5. Safety veto: block unsafe recommendations; populate vetoed_recommendations
 """
 
 from __future__ import annotations
@@ -42,7 +42,8 @@ class Orchestrator:
         log.info("orchestrator.specialists.done", count=len(specialist_results))
 
         # ── 2. Evidence grounding ──────────────────────────────────────────────
-        # TODO: call evidence_agent.run(case, specialist_results)
+        if self._evidence_agent is not None:
+            await self._evidence_agent.run(case, list(specialist_results))
 
         # ── 3. A2A debate ─────────────────────────────────────────────────────
         debate = DebateManager(case_id=case.case_id)
@@ -57,15 +58,28 @@ class Orchestrator:
             divergent=divergent,
         )
 
-        # ── 4. Safety veto ────────────────────────────────────────────────────
-        # TODO: call safety_agent.run(case, specialist_results)
-
-        # ── 5. Synthesis ──────────────────────────────────────────────────────
+        # ── 4. Synthesis ──────────────────────────────────────────────────────
         # TODO: rank and merge specialist diagnoses into DifferentialReport
         report = DifferentialReport(
             case_id=case.case_id,
             consensus_level=sum(consensus.values()) / max(len(consensus), 1),
             divergent_agents=divergent,
         )
+
+        # ── 5. Safety veto ────────────────────────────────────────────────────
+        # Runs after synthesis so it can inspect the assembled recommendations.
+        # If any decision is vetoed, the vetoed items are recorded on the report
+        # and a warning is logged; the orchestrator caller decides whether to halt.
+        if self._safety_agent is not None:
+            safety_result = await self._safety_agent.run(case, report)
+            vetoed = [d for d in safety_result.decisions if d.vetoed]
+            if vetoed:
+                log.warning(
+                    "orchestrator.safety_veto.halt",
+                    case_id=str(case.case_id),
+                    vetoed_count=len(vetoed),
+                )
+                report = report.model_copy(update={"vetoed_recommendations": vetoed})
+
         log.info("orchestrator.run.complete")
         return report

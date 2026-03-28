@@ -179,6 +179,21 @@ _MOCK_RESPONSES: dict[str, str] = {
             "explanation": "Mock claim evaluation — no real model was called.",
         }
     ),
+    # Safety veto response used by SafetyVetoAgent when calling phi4:14b.
+    # In practice MOCK_LLM short-circuits before call_chat is reached, but
+    # the entry is here so tests can patch call_chat and get a deterministic reply.
+    "safety": json.dumps(
+        {
+            "decisions": [
+                {
+                    "recommendation": "Mock recommendation",
+                    "vetoed": False,
+                    "reason": None,
+                    "contraindication_codes": [],
+                }
+            ]
+        }
+    ),
 }
 
 _MOCK_FALLBACK = json.dumps(
