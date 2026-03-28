@@ -2,6 +2,7 @@
 
 import { use, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import type { DifferentialReport, DiagnosisCandidate } from '@/types/report'
 import { SafetyBanner } from '@/components/report/SafetyBanner'
@@ -9,15 +10,27 @@ import { DebateSummary } from '@/components/report/DebateSummary'
 import { DifferentialList } from '@/components/report/DifferentialList'
 import { CitationPanel } from '@/components/report/CitationPanel'
 
-function statusLabel(status: DifferentialReport['status']): string {
-  switch (status) {
-    case 'queued':
-      return 'Queued…'
-    case 'running':
-      return 'Running specialists…'
-    default:
-      return 'Synthesizing…'
+function StatusText({ status }: { status: DifferentialReport['status'] | undefined }) {
+  if (!status || status === 'queued') {
+    return (
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {status ? 'Queued — waiting for pipeline slot\u2026' : 'Loading\u2026'}
+      </p>
+    )
   }
+  if (status === 'running') {
+    return (
+      <p className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        Running specialist agents\u2026
+      </p>
+    )
+  }
+  return (
+    <p className="text-sm text-slate-500 dark:text-slate-400">
+      Synthesizing consensus\u2026
+    </p>
+  )
 }
 
 function formatTimestamp(iso: string): string {
@@ -35,9 +48,11 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
   const { id } = use(params)
   const [selectedDiagnosis, setSelectedDiagnosis] = useState<DiagnosisCandidate | null>(null)
 
+  // TanStack Query handles cleanup on unmount automatically — no manual teardown needed.
   const { data: report, error, isLoading } = useQuery<DifferentialReport, Error>({
     queryKey: ['report', id],
     queryFn: () => api.get<DifferentialReport>(`/reports/${id}`).then((r) => r.data),
+    // Stop polling once complete; TanStack Query cleans up on unmount so no memory leak risk.
     refetchInterval: (query) =>
       query.state.data?.status === 'complete' ? false : 2000,
   })
@@ -60,26 +75,25 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
 
   if (isInProgress) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        {/* Indeterminate progress strip */}
-        <div className="h-1 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-          <div className="h-full w-1/3 bg-emerald-500 rounded-full animate-pulse" />
+      <>
+        {/* Full-width indeterminate progress bar — sits at very top of page */}
+        <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 overflow-hidden">
+          <div className="h-full bg-emerald-500 animate-[progressBar_1.5s_ease-in-out_infinite]" />
         </div>
 
-        {/* Status text */}
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {report ? statusLabel(report.status) : 'Loading…'}
-        </p>
+        <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+          <StatusText status={report?.status} />
 
-        {/* Skeleton cards */}
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="animate-pulse bg-slate-200 dark:bg-slate-800 rounded h-24"
-            aria-hidden="true"
-          />
-        ))}
-      </div>
+          {/* Skeleton cards */}
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="animate-pulse bg-slate-200 dark:bg-slate-800 rounded h-24"
+              aria-hidden="true"
+            />
+          ))}
+        </div>
+      </>
     )
   }
 
