@@ -6,9 +6,13 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import structlog
+from arq import create_pool
+from arq.connections import RedisSettings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.config import get_settings
+from api.db import close_pool, init_pool
 from api.routes import cases, reports
 
 logger = structlog.get_logger()
@@ -16,9 +20,15 @@ logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    settings = get_settings()
     logger.info("shadi.startup")
-    # TODO: initialise DB pool, Redis connection, vLLM client
+    pool = await init_pool(settings.database_url)
+    app.state.pool = pool
+    arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+    app.state.arq_redis = arq_redis
     yield
+    await arq_redis.close()
+    await close_pool(pool)
     logger.info("shadi.shutdown")
 
 
