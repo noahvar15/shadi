@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager, contextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import uuid4
 
 import pytest
@@ -125,6 +125,12 @@ async def test_run_diagnostic_pipeline_writes_report(monkeypatch: pytest.MonkeyP
     conn.fetchrow = AsyncMock(side_effect=fetchrow)
     conn.execute = AsyncMock()
 
+    @asynccontextmanager
+    async def _tx():
+        yield
+
+    conn.transaction = Mock(return_value=_tx())
+
     pool = MagicMock()
 
     @asynccontextmanager
@@ -137,7 +143,7 @@ async def test_run_diagnostic_pipeline_writes_report(monkeypatch: pytest.MonkeyP
 
     await run_diagnostic_pipeline({"pool": pool}, str(case.case_id))
 
-    assert conn.execute.await_count >= 2
+    assert conn.execute.await_count >= 1
     final_sql = str(conn.execute.await_args_list[-1].args[0])
     assert "report_json" in final_sql
     args = conn.execute.await_args_list[-1].args

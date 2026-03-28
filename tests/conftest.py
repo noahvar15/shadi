@@ -20,6 +20,9 @@ os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:9/0")
 def _pytest_api_secret_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure API_SECRET_KEY is set for any test that loads Settings."""
     monkeypatch.setenv("API_SECRET_KEY", _PYTEST_API_SECRET)
+    from api.config import get_settings
+
+    get_settings.cache_clear()
 
 
 def reload_api_modules() -> None:

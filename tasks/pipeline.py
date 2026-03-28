@@ -7,7 +7,6 @@ DEP-2 (cross-track-dependencies): swap stub fallback for a hard dependency on
 from __future__ import annotations
 
 import json
-import traceback
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -42,33 +41,28 @@ async def run_diagnostic_pipeline(ctx: dict[str, Any], case_id: str) -> None:
     log = logger.bind(case_id=case_id)
 
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT case_json FROM cases WHERE id = $1",
-            cid,
-        )
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                """
+                UPDATE cases
+                SET status = 'processing', error_message = NULL, updated_at = NOW()
+                WHERE id = $1 AND (status = 'queued' OR status = 'pending_enqueue')
+                RETURNING case_json
+                """,
+                cid,
+            )
     if row is None:
-        log.warning("pipeline.case_missing")
+        log.warning("pipeline.skip_not_claimable", case_id=case_id)
         return
 
     case = _parse_case_payload(row["case_json"])
-
-    async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            UPDATE cases
-            SET status = $2, error_message = NULL, updated_at = NOW()
-            WHERE id = $1
-            """,
-            cid,
-            "processing",
-        )
 
     orchestrator_error: str | None = None
     try:
         report = await Orchestrator().run(case)
     except Exception as exc:  # noqa: BLE001 — deliberate stub until #39
-        log.warning("orchestrator_stub_fallback", err=str(exc), exc_info=True)
-        orchestrator_error = traceback.format_exc()
+        log.exception("orchestrator_stub_fallback", err=str(exc))
+        orchestrator_error = "orchestrator_failure"
         report = _fixture_report(cid)
 
     async with pool.acquire() as conn:

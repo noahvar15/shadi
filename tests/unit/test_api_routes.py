@@ -87,6 +87,17 @@ def test_post_cases_stub_queues_job(api_client) -> None:
     mock_arq.enqueue_job.assert_awaited_once()
 
 
+def test_post_cases_enqueue_failure_marks_row_and_503(api_client) -> None:
+    client, mock_conn, mock_arq = api_client
+    mock_arq.enqueue_job = AsyncMock(side_effect=RuntimeError("redis down"))
+    r = client.post("/cases", json=_MINIMAL_FHIR_BUNDLE)
+    assert r.status_code == 503
+    assert mock_conn.execute.await_count >= 2
+    fail_args = mock_conn.execute.await_args_list[-1].args
+    assert fail_args[2] == "enqueue_failed"
+    assert fail_args[3] == "enqueue_failed"
+
+
 def test_report_status_not_found(api_client) -> None:
     client, mock_conn, _mock_arq = api_client
     mock_conn.fetchrow = AsyncMock(return_value=None)
