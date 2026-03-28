@@ -212,7 +212,7 @@ class EvidenceAgent(BaseAgent[EvidenceResult]):
                     EvidenceCitation(
                         source=passage["source"],
                         excerpt=passage["excerpt"],
-                        relevance_score=float(passage.get("distance", 0.0)),
+                        relevance_score=round(1.0 - float(passage.get("distance", 0.0)), 4),
                     )
                 )
 
