@@ -43,6 +43,13 @@ class Observation(BaseModel):
 class CaseObject(BaseModel):
     """Normalized patient case passed to all agents."""
 
+    @classmethod
+    def from_fhir_bundle(cls, bundle_json: dict[str, Any]) -> CaseObject:
+        """Build a case from a FHIR R4 ``Bundle`` resource (parsed JSON dict)."""
+        from shadi_fhir.normalizer import FHIRNormalizer
+
+        return FHIRNormalizer().bundle_to_case(bundle_json)
+
     case_id: UUID = Field(default_factory=uuid4)
     patient_id: str
     encounter_id: str

@@ -1,0 +1,100 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "pat-sample-1",
+        "gender": "male",
+        "birthDate": "1985-04-12"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "enc-sample-1",
+        "status": "arrived",
+        "subject": { "reference": "Patient/pat-sample-1" },
+        "reasonCode": [
+          {
+            "text": "Shortness of breath"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "id": "cond-1",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "267036007",
+              "display": "Dyspnea"
+            }
+          ],
+          "text": "Dyspnea"
+        },
+        "subject": { "reference": "Patient/pat-sample-1" }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-1",
+        "status": "final",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ]
+        },
+        "valueQuantity": {
+          "value": 102,
+          "unit": "/min"
+        },
+        "subject": { "reference": "Patient/pat-sample-1" }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "med-1",
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "313782",
+              "display": "Acetaminophen 325 MG Oral Tablet"
+            }
+          ],
+          "text": "Acetaminophen"
+        },
+        "subject": { "reference": "Patient/pat-sample-1" }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "AllergyIntolerance",
+        "id": "all-1",
+        "patient": { "reference": "Patient/pat-sample-1" },
+        "code": {
+          "text": "Penicillin"
+        },
+        "reaction": [
+          {
+            "manifestation": [{ "text": "Rash" }],
+            "severity": "moderate"
+          }
+        ]
+      }
+    }
+  ]
+}

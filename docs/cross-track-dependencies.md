@@ -10,7 +10,7 @@ This document maps every dependency between the four parallel development tracks
 
 | Track | Owner | Epic issue | Core directory |
 |---|---|---|---|
-| FHIR / EHR | Noah Vargas (`noahvar15`) | #25 | `fhir/` |
+| FHIR / EHR | Noah Vargas (`noahvar15`) | #25 | `shadi_fhir/` |
 | Backend platform | Emmanuel Giron (`Manny-Giron`) | #30 | `api/` |
 | Agents | Joshua Pereira (`Josh7511`) | #35 | `agents/`, `a2a/` |
 | Dashboard | Ericsen Semedo (`EricsenSemedo`) | #40 | `dashboard/` |
@@ -47,7 +47,7 @@ Ericsen (Dashboard) #41 ──► #42 ──────────────
 
 | | |
 |---|---|
-| **Produces** | `FHIRNormalizer.bundle_to_case(bundle_json) -> CaseObject` in `fhir/normalizer.py` |
+| **Produces** | `FHIRNormalizer.bundle_to_case(bundle_json) -> CaseObject` in `shadi_fhir/normalizer.py` |
 | **Consumed by** | `POST /cases` in `api/routes/cases.py` — calls the normalizer to convert the incoming FHIR bundle into a `CaseObject` before DB insert |
 | **Blocked task** | #32 full implementation |
 | **How to stay unblocked** | Emmanuel: implement the route with a stub normalizer call: `case = CaseObject(patient_id="stub", ...)`. Wire in the real normalizer once #28 is merged. |

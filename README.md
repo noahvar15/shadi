@@ -165,7 +165,7 @@ shadi/
 │   ├── evidence/                # PubMed + guidelines cross-reference
 │   ├── safety/                  # Safety veto agent
 │   └── orchestrator/            # Fan-out, A2A debate, synthesis
-├── fhir/                        # FHIR R4 MCP server + resource normalizer
+├── shadi_fhir/                  # FHIR R4 bundle normalizer (MCP in later issues)
 ├── a2a/                         # A2A protocol schema + debate round logic
 ├── models/                      # vLLM engine + LoRA adapter management
 ├── api/                         # FastAPI app + routes

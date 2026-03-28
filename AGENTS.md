@@ -34,7 +34,7 @@ agents/
   evidence/          # PubMed + guidelines cross-reference
   safety/            # Safety veto (contraindications, allergies, meds)
   orchestrator/      # Fan-out, A2A debate, consensus synthesis
-fhir/                # FHIR R4 MCP server + resource normalizer
+shadi_fhir/          # FHIR R4 normalizer (`fhir.resources` is the HL7 lib — avoid a top-level `fhir` pkg)
 a2a/                 # A2A protocol schema + ENDORSE/CHALLENGE/MODIFY logic
 models/              # vLLM engine wrapper + LoRA adapter management
 api/                 # FastAPI app (routes, schemas, middleware)
@@ -106,7 +106,7 @@ Project-level skills live in `skills/`. They are tracked in git and shared acros
 | `subagent-driven-development` | Executing an existing plan with independent sub-tasks |
 | `python-performance-optimization` | Slow inference, memory pressure, profiling |
 | `api-design-principles` | New FastAPI routes, FHIR endpoint design |
-| `mcp-builder` | Changes to the FHIR MCP server in `fhir/` |
+| `mcp-builder` | Changes to the FHIR MCP server in `shadi_fhir/` |
 | `requesting-code-review` | After completing a feature or before merging |
 | `receiving-code-review` | When acting on code review feedback |
 | `git-advanced-workflows` | Complex rebases, bisect, recovering commits |
