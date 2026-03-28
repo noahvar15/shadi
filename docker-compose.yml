@@ -119,6 +119,31 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── arq worker (diagnostic pipeline jobs) ─────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: arq tasks.worker.WorkerSettings
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://shadi:shadi@postgres:5432/shadi
+      - REDIS_URL=redis://redis:6379/0
+      - API_SECRET_KEY=${API_SECRET_KEY:-dev-local-only-set-a-long-random-secret}
+      - INTAKE_QUEUE=${INTAKE_QUEUE:-arq:intake}
+      - VLLM_BASE_URL=http://vllm:8080/v1
+      - OLLAMA_BASE_URL=http://ollama:11434/v1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vllm:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+
   # ─── Physician Dashboard ─────────────────────────────────────────────────────
   dashboard:
     build:

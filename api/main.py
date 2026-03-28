@@ -26,27 +26,42 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.fhir_mcp = None
     pool = await init_pool(settings.database_url)
     app.state.pool = pool
+    arq_redis = None
     try:
-        arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-        app.state.arq_redis = arq_redis
         try:
+            arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+            app.state.arq_redis = arq_redis
+        except Exception:
+            try:
+                await close_pool(pool)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("shadi.startup.cleanup.db_failed", err=str(exc))
+            pool = None
+            raise
+        try:
+            if settings.fhir_mcp_enabled:
+                mcp = build_fhir_mcp_server(settings)
+                await mcp.start()
+                app.state.fhir_mcp = mcp
             yield
         finally:
-            await arq_redis.close()
+            logger.info("shadi.shutdown")
+            if app.state.fhir_mcp is not None:
+                try:
+                    await app.state.fhir_mcp.stop()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("shadi.shutdown.fhir_mcp_stop_failed", err=str(exc))
+            if arq_redis is not None:
+                try:
+                    await arq_redis.close()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("shadi.shutdown.arq_close_failed", err=str(exc))
     finally:
-        await close_pool(pool)
-    arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-    app.state.arq_redis = arq_redis
-    if settings.fhir_mcp_enabled:
-        mcp = build_fhir_mcp_server(settings)
-        await mcp.start()
-        app.state.fhir_mcp = mcp
-    yield
-    if app.state.fhir_mcp is not None:
-        await app.state.fhir_mcp.stop()
-    await arq_redis.close()
-    await close_pool(pool)
-    logger.info("shadi.shutdown")
+        if pool is not None:
+            try:
+                await close_pool(pool)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("shadi.shutdown.db_close_failed", err=str(exc))
 
 
 app = FastAPI(

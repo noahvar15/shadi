@@ -9,8 +9,9 @@ from __future__ import annotations
 import json
 from typing import Annotated, Any, Literal
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from agents.schemas import CaseObject
 from api.config import Settings, get_settings
@@ -18,6 +19,7 @@ from api.deps import ArqDep, PoolDep
 from shadi_fhir.exceptions import FHIRValidationError
 
 router = APIRouter()
+logger = structlog.get_logger()
 
 
 class CaseQueuedResponse(BaseModel):
@@ -42,7 +44,7 @@ async def create_case(
     else:
         try:
             case = CaseObject.from_fhir_bundle(bundle)
-        except FHIRValidationError as e:
+        except (FHIRValidationError, ValidationError) as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
     case_json_str = json.dumps(case.model_dump(mode="json"))
@@ -57,16 +59,35 @@ async def create_case(
             case_json_str,
         )
 
-    await arq_redis.enqueue_job(
-        "tasks.pipeline.run_diagnostic_pipeline",
-        str(case.case_id),
-        _queue_name=settings.intake_queue,
-    )
+    try:
+        await arq_redis.enqueue_job(
+            "tasks.pipeline.run_diagnostic_pipeline",
+            str(case.case_id),
+            _queue_name=settings.intake_queue,
+        )
+    except Exception as exc:
+        logger.error("cases.enqueue_failed", case_id=str(case.case_id), err=str(exc), exc_info=True)
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE cases
+                SET status = $2, error_message = $3, updated_at = NOW()
+                WHERE id = $1 AND status = 'pending_enqueue'
+                """,
+                case.case_id,
+                "enqueue_failed",
+                "enqueue_failed",
+            )
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to queue diagnostic job; try again later.",
+        ) from exc
 
     async with pool.acquire() as conn:
         await conn.execute(
             """
-            UPDATE cases SET status = $2, updated_at = NOW() WHERE id = $1
+            UPDATE cases SET status = $2, updated_at = NOW()
+            WHERE id = $1 AND status = 'pending_enqueue'
             """,
             case.case_id,
             "queued",

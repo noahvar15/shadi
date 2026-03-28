@@ -61,6 +61,18 @@ def test_settings_reads_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
 
 
+def test_api_secret_rejects_placeholders(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://a:b@localhost:5432/x")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("API_SECRET_KEY", "change-me")
+    from api.config import Settings, get_settings
+
+    get_settings.cache_clear()
+    with pytest.raises(ValueError, match="API_SECRET_KEY"):
+        Settings()
+    get_settings.cache_clear()
+
+
 def test_lifespan_sets_pool_and_arq_on_state(monkeypatch: pytest.MonkeyPatch) -> None:
     with _patched_lifespan(monkeypatch) as (client, mock_pool, mock_arq):
         assert client.app.state.pool is mock_pool
