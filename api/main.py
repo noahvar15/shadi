@@ -22,35 +22,30 @@ logger = structlog.get_logger()
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     logger.info("shadi.startup")
-    pool = None
+    pool = await init_pool(settings.database_url)
+    app.state.pool = pool
     arq_redis = None
     try:
-        pool = await init_pool(settings.database_url)
-        arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-        app.state.pool = pool
-        app.state.arq_redis = arq_redis
-    except Exception:
-        if arq_redis is not None:
-            try:
-                await arq_redis.close()
-            except Exception as exc:  # noqa: BLE001 — defensive cleanup
-                logger.warning("shadi.startup.cleanup.arq_failed", err=str(exc))
-        if pool is not None:
+        try:
+            arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+            app.state.arq_redis = arq_redis
+        except Exception:
             try:
                 await close_pool(pool)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("shadi.startup.cleanup.db_failed", err=str(exc))
-        raise
-
-    try:
-        yield
+            pool = None
+            raise
+        try:
+            yield
+        finally:
+            logger.info("shadi.shutdown")
+            if arq_redis is not None:
+                try:
+                    await arq_redis.close()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("shadi.shutdown.arq_close_failed", err=str(exc))
     finally:
-        logger.info("shadi.shutdown")
-        if arq_redis is not None:
-            try:
-                await arq_redis.close()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("shadi.shutdown.arq_close_failed", err=str(exc))
         if pool is not None:
             try:
                 await close_pool(pool)
