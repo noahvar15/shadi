@@ -445,6 +445,8 @@ async def test_evidence_agent_supports_attaches_citation():
     assert len(citations) == 1
     assert citations[0].source == "PubMed:12345678"
     assert citations[0].excerpt == "AMI is the leading cause..."
+    # relevance_score should be 1.0 - cosine_distance (0.25) = 0.75
+    assert citations[0].relevance_score == pytest.approx(0.75)
 
 
 async def test_evidence_agent_refutes_no_citation():
