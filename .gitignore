@@ -27,6 +27,10 @@ env/
 *.swp
 *.swo
 
+# AI tool config dirs — agent-specific, not shared
+.claude/
+.cursor/
+
 # macOS
 .DS_Store
 
