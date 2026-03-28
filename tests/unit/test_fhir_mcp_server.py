@@ -96,9 +96,13 @@ async def test_start_registers_subscription() -> None:
             )
         raise AssertionError(f"unexpected POST {u!r}")
 
+    async def delete_side_effect(url: str, **kwargs: object) -> httpx.Response:
+        assert "sub-99" in str(url)
+        return _http_response(204, method="DELETE", url=str(url))
+
     mock_http = AsyncMock()
     mock_http.post = AsyncMock(side_effect=post_side_effect)
-    mock_http.delete = AsyncMock()
+    mock_http.delete = AsyncMock(side_effect=delete_side_effect)
     mock_http.aclose = AsyncMock()
 
     mock_arq = AsyncMock()
@@ -114,7 +118,32 @@ async def test_start_registers_subscription() -> None:
 
     assert server._subscription_id == "sub-99"
     await server.stop()
+    mock_http.delete.assert_awaited()
     mock_arq.close.assert_awaited()
+    mock_http.aclose.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stop_swallows_404_on_delete() -> None:
+    server = _make_server()
+    server._subscription_id = "gone"
+    server._access_token = "t"
+    server._token_deadline_monotonic = 1e12
+
+    mock_http = AsyncMock()
+    mock_http.delete = AsyncMock(
+        return_value=_http_response(
+            404,
+            method="DELETE",
+            url="https://fhir.example.org/R4/Subscription/gone",
+        )
+    )
+    mock_http.aclose = AsyncMock()
+    server._http = mock_http
+    server._arq = None
+
+    await server.stop()
+    mock_http.delete.assert_awaited()
     mock_http.aclose.assert_awaited()
 
 

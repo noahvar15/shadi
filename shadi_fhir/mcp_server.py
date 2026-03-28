@@ -1,7 +1,4 @@
-"""FHIR R4 MCP server — OAuth, Subscription, and notifications (issues #26–#27).
-
-Subscription DELETE on shutdown is issue #29.
-"""
+"""FHIR R4 MCP server — OAuth (#26), Subscription + notify (#27), clean shutdown (#29)."""
 
 from __future__ import annotations
 
@@ -145,7 +142,27 @@ class FHIRMCPServer:
         logger.info("fhir.mcp_server.started", base_url=self._base_url)
 
     async def stop(self) -> None:
-        """Close arq pool and HTTP client (issue #29 adds Subscription DELETE)."""
+        """DELETE Subscription (best-effort), close arq pool and HTTP client."""
+        if self._subscription_id and self._http is not None:
+            try:
+                token = await self._get_token()
+                r = await self._http.delete(
+                    f"/Subscription/{self._subscription_id}",
+                    headers=self._fhir_headers(token),
+                )
+                if r.status_code == 404:
+                    logger.info(
+                        "fhir.subscription.already_deleted",
+                        subscription_id=self._subscription_id,
+                    )
+                elif not r.is_success:
+                    logger.warning(
+                        "fhir.subscription.delete_status",
+                        status_code=r.status_code,
+                        subscription_id=self._subscription_id,
+                    )
+            except Exception as exc:
+                logger.warning("fhir.subscription.delete_exception", error=str(exc))
         self._subscription_id = None
         if self._arq is not None:
             try:
