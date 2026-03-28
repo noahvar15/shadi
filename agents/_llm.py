@@ -148,6 +148,15 @@ _MOCK_RESPONSES: dict[str, str] = {
             "reasoning_trace": "Mock toxicology reasoning — no real model was called.",
         }
     ),
+    # Claim evaluation response used by EvidenceAgent when calling meditron:70b.
+    # In practice MOCK_LLM short-circuits before claim eval is ever reached, but
+    # the entry is here so tests can patch call_chat and get a deterministic reply.
+    "evidence": json.dumps(
+        {
+            "verdict": "SUPPORTS",
+            "explanation": "Mock claim evaluation — no real model was called.",
+        }
+    ),
 }
 
 _MOCK_FALLBACK = json.dumps(

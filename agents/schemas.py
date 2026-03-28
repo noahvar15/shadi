@@ -120,6 +120,12 @@ class SafetyResult(AgentResult):
     decisions: list[VetoDecision] = Field(default_factory=list)
 
 
+class EvidenceResult(AgentResult):
+    """Result produced by the evidence grounding agent."""
+
+    grounded_diagnoses: list[DiagnosisCandidate] = Field(default_factory=list)
+
+
 class DifferentialReport(BaseModel):
     """Final synthesized output written as a FHIR DiagnosticReport."""
 
