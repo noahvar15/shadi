@@ -1,0 +1,105 @@
+services:
+
+  # ─── Inference Server ────────────────────────────────────────────────────────
+  # Decision: vLLM chosen for native LoRA hot-swap support (--enable-lora) and
+  # OpenAI-compatible API surface. Alternatives: llama.cpp (no LoRA hot-swap),
+  # TGI (LoRA support experimental at time of writing).
+  vllm:
+    image: vllm/vllm-openai:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      - ${MODEL_BASE_PATH:-/models/meditron-70b}:/models/base:ro
+      - ${LORA_ADAPTERS_PATH:-/models/adapters}:/models/adapters:ro
+    command: >
+      --model /models/base
+      --enable-lora
+      --lora-modules
+        cardiology=/models/adapters/cardiology
+        neurology=/models/adapters/neurology
+        pulmonology=/models/adapters/pulmonology
+        toxicology=/models/adapters/toxicology
+      --quantization fp4
+      --max-model-len 8192
+      --port 8080
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ─── Database ────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: shadi
+      POSTGRES_USER: shadi
+      POSTGRES_PASSWORD: shadi
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shadi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Task Queue / Pub-Sub ────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend API ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://shadi:shadi@postgres:5432/shadi
+      - REDIS_URL=redis://redis:6379/0
+      - VLLM_BASE_URL=http://vllm:8080/v1
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vllm:
+        condition: service_healthy
+    volumes:
+      - ${EVIDENCE_INDEX_PATH:-/data/evidence_index}:/data/evidence_index:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ─── Physician Dashboard ─────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

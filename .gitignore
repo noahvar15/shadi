@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.installed.cfg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables — NEVER commit .env
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Node / dashboard
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+
+# Models — weights are too large for git; use DVC or manual placement
+models/adapters/*/adapter_model.safetensors
+models/adapters/*/adapter_model.bin
+/models/
+
+# Evidence index — built locally, not committed
+/data/
+
+# Test artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Docker
+*.log
