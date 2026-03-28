@@ -93,3 +93,4 @@ htmlcov/
 
 # Docker
 *.log
+.worktrees/
