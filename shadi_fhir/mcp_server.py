@@ -1,17 +1,20 @@
-"""FHIR R4 MCP server — SMART on FHIR authentication (issue #26).
+"""FHIR R4 MCP server — OAuth, Subscription, and notifications (issues #26–#27).
 
-Subscription registration, notifications, and subscription teardown are
-implemented in issues #27 and #29.
+Subscription DELETE on shutdown is issue #29.
 """
 
 from __future__ import annotations
 
 import time
+from typing import Any
 
 import httpx
 import structlog
 
+from agents.schemas import CaseObject
 from shadi_fhir.exceptions import FHIRAuthError
+from shadi_fhir.intake_queue import create_intake_pool, enqueue_intake_case
+from shadi_fhir.normalizer import FHIRNormalizer
 
 logger = structlog.get_logger()
 
@@ -19,14 +22,30 @@ _OAUTH_SCOPE = "system/Encounter.read system/Patient.read"
 
 
 class FHIRMCPServer:
-    """OAuth2 client-credentials client for FHIR R4 APIs (Epic/Cerner)."""
+    """Subscribes to FHIR R4 encounter events from Epic/Cerner."""
 
-    def __init__(self, base_url: str, client_id: str, client_secret: str, token_url: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        client_id: str,
+        client_secret: str,
+        token_url: str,
+        *,
+        notification_endpoint: str,
+        redis_url: str,
+        intake_queue: str,
+    ) -> None:
         self._base_url = base_url.rstrip("/")
         self._client_id = client_id
         self._client_secret = client_secret
         self._token_url = token_url
+        self._notification_endpoint = notification_endpoint
+        self._redis_url = redis_url
+        self._intake_queue = intake_queue
+        self._normalizer = FHIRNormalizer()
         self._http: httpx.AsyncClient | None = None
+        self._arq: Any = None
+        self._subscription_id: str | None = None
         self._access_token: str | None = None
         self._token_deadline_monotonic: float = 0.0
 
@@ -70,24 +89,83 @@ class FHIRMCPServer:
         assert self._access_token is not None
         return self._access_token
 
+    def _fhir_headers(self, token: str) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/fhir+json",
+            "Accept": "application/fhir+json",
+        }
+
+    async def _register_subscription(self) -> None:
+        if self._http is None:
+            raise RuntimeError("HTTP client not initialised")
+        token = await self._get_token()
+        payload = {
+            "resourceType": "Subscription",
+            "status": "active",
+            "criteria": "Encounter?status=arrived",
+            "channel": {
+                "type": "rest-hook",
+                "endpoint": self._notification_endpoint,
+                "payload": "application/fhir+json",
+            },
+        }
+        resp = await self._http.post(
+            "/Subscription",
+            json=payload,
+            headers=self._fhir_headers(token),
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        sid = body.get("id")
+        if not sid:
+            raise RuntimeError("FHIR Subscription response missing id")
+        self._subscription_id = str(sid)
+        logger.info("fhir.subscription.registered", subscription_id=self._subscription_id)
+
     async def start(self) -> None:
-        """Create HTTP client and obtain an access token."""
+        """Authenticate, connect Redis/arq, and register encounter subscription."""
         self._http = httpx.AsyncClient(base_url=self._base_url, timeout=60.0)
+        arq_pool: Any = None
         try:
             await self._refresh_token()
+            arq_pool = await create_intake_pool(self._redis_url, self._intake_queue)
+            self._arq = arq_pool
+            await self._register_subscription()
         except Exception:
+            self._arq = None
+            if arq_pool is not None:
+                await arq_pool.close()
             if self._http is not None:
                 await self._http.aclose()
                 self._http = None
             self._access_token = None
+            self._subscription_id = None
             raise
         logger.info("fhir.mcp_server.started", base_url=self._base_url)
 
     async def stop(self) -> None:
-        """Close the FHIR HTTP client."""
+        """Close arq pool and HTTP client (issue #29 adds Subscription DELETE)."""
+        self._subscription_id = None
+        if self._arq is not None:
+            try:
+                await self._arq.close()
+            finally:
+                self._arq = None
         if self._http is not None:
-            await self._http.aclose()
-            self._http = None
+            try:
+                await self._http.aclose()
+            finally:
+                self._http = None
         self._access_token = None
         self._token_deadline_monotonic = 0.0
         logger.info("fhir.mcp_server.stopped")
+
+    async def handle_notification(self, bundle: dict[str, Any]) -> CaseObject:
+        """Normalize a notification bundle and enqueue it for intake processing."""
+        case = self._normalizer.bundle_to_case(bundle)
+        if self._arq is not None:
+            await enqueue_intake_case(self._arq, case)
+        else:
+            logger.warning("fhir.notify.enqueue_skipped", reason="arq_pool_not_initialized")
+        return case
