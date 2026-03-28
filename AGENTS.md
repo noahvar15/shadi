@@ -134,3 +134,19 @@ Agents communicate via structured messages in `a2a/`. Valid message types: `ENDO
 2. Evidence grounding runs after specialist reasoning, before debate.
 3. The safety veto runs last, after consensus, and can block any recommendation unconditionally.
 4. The LoRA adapter for each specialist must match the specialty's training domain exactly.
+
+---
+
+## Learned User Preferences
+
+- Always use `bunx` instead of `npx` for all CLI tools in this project (e.g. `bunx skills add`, not `npx skills add`).
+- Each GitHub issue gets its own branch, git worktree (under `.worktrees/` — gitignored), and a separate PR; never bundle multiple issues into one branch.
+
+---
+
+## Learned Workspace Facts
+
+- Subagent model routing: `planner` → `claude-4.6-sonnet-medium-thinking` (strategic decomposition); `worker` → `gpt-5.4-medium` (Python agents, FHIR, A2A, API, models, infra — never `dashboard/`); `ui-engineer` → `claude-sonnet-4-6` (all work inside `dashboard/` exclusively); `reviewer` → `claude-opus-4-6` (verification and code review).
+- Project-level skills for team sharing live in `.agents/skills/` (committed to git). `.cursor/` is gitignored. `.claude/skills/` is not used — the team does not use Claude.
+- Dashboard design system (defined in `tailwind.config.ts` on the scaffold branch, inherited by all downstream issues): Vercel/Linear aesthetic; Tailwind `darkMode: 'class'`; slate-950/white base; emerald-400/500 primary accent (high confidence, CTAs); red-500/600 safety veto/danger; amber-400/500 warnings/divergent agents; monospace for clinical scores and numbers, sans-serif for prose.
+- Dashboard issue dependency order: #41 (scaffold) must merge before #42 (case intake) and #43 (report view); #43 must merge before #44 (live updates).
