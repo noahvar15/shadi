@@ -34,7 +34,7 @@ services:
       start_period: 120s
 
   # ─── Inference: Ollama (all non-specialist agents) ───────────────────────────
-  # Serves: medgemma:27b (image), qwen2.5:7b (intake), nomic-embed-text
+  # Serves: alibayram/medgemma:27b (image), qwen2.5:7b (intake), nomic-embed-text
   # (evidence retrieval), phi4:14b (safety veto), deepseek-r1:32b (orchestrator).
   # All expose an OpenAI-compatible /v1 endpoint identical to vLLM. See ADR-002.
   ollama:
@@ -94,7 +94,7 @@ services:
       - VLLM_BASE_URL=http://vllm:8080/v1
       - OLLAMA_BASE_URL=http://ollama:11434/v1
       # Model assignments — see ADR-002
-      - IMAGE_MODEL=medgemma:27b
+      - IMAGE_MODEL=alibayram/medgemma:27b
       - INTAKE_MODEL=qwen2.5:7b
       - EVIDENCE_EMBED_MODEL=nomic-embed-text
       - SAFETY_MODEL=phi4:14b

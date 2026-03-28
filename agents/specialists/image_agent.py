@@ -1,6 +1,6 @@
 """Image analysis agent — radiology / multimodal interpretation.
 
-Model: medgemma:27b via Ollama (see ADR-002)
+Model: alibayram/medgemma:27b via Ollama (see ADR-002)
 Inference server: OLLAMA_BASE_URL
 
 If the case carries no ``imaging_attachments`` the agent returns an empty
@@ -49,7 +49,7 @@ class ImageAnalysisAgent(BaseAgent[SpecialistResult]):
 
     name = "image-analysis"
     domain = "imaging"
-    model = "medgemma:27b"
+    model = "alibayram/medgemma:27b"
     inference_url = settings.OLLAMA_BASE_URL
 
     async def reason(self, case: CaseObject) -> SpecialistResult:
