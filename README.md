@@ -2,6 +2,8 @@
 
 **Multi-agent clinical diagnostic reasoning system for emergency medicine.**
 
+> Temporary note for test PR validation. This line can be removed when the PR is deleted.
+
 A patient case arrives from the EHR via FHIR R4. Five specialist agents — each running a domain-specific LoRA adapter on a shared 70B base model — reason independently over the case, debate via a structured A2A protocol, and produce a ranked differential diagnosis with confidence scores, evidence citations, and a safety veto layer. The attending physician receives this before walking into the room.
 
 ---
