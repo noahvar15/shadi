@@ -7,6 +7,8 @@ from functools import lru_cache
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from shadi_fhir.mcp_server import FHIRMCPServer
+
 _PLACEHOLDER_API_SECRETS = frozenset(
     {
         "",
@@ -21,7 +23,6 @@ _PLACEHOLDER_API_SECRETS = frozenset(
     }
 )
 
-from shadi_fhir.mcp_server import FHIRMCPServer
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -50,8 +51,7 @@ class Settings(BaseSettings):
             msg = "API_SECRET_KEY must be set to a non-placeholder value (not change-me, REPLACE_ME, etc.)"
             raise ValueError(msg)
         return v
-    intake_queue: str = Field(default="shadi:intake", validation_alias="INTAKE_QUEUE")
-    api_secret_key: str = Field(default="change-me", validation_alias="API_SECRET_KEY")
+
     fhir_base_url: str = ""
     fhir_client_id: str = ""
     fhir_client_secret: str = ""
@@ -60,6 +60,7 @@ class Settings(BaseSettings):
         default="",
         validation_alias="NOTIFICATION_ENDPOINT",
     )
+
     @property
     def fhir_mcp_enabled(self) -> bool:
         return bool(

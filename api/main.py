@@ -39,9 +39,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             pool = None
             raise
         try:
+            if settings.fhir_mcp_enabled:
+                mcp = build_fhir_mcp_server(settings)
+                await mcp.start()
+                app.state.fhir_mcp = mcp
             yield
         finally:
             logger.info("shadi.shutdown")
+            if app.state.fhir_mcp is not None:
+                try:
+                    await app.state.fhir_mcp.stop()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("shadi.shutdown.fhir_mcp_stop_failed", err=str(exc))
             if arq_redis is not None:
                 try:
                     await arq_redis.close()
@@ -53,18 +62,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 await close_pool(pool)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("shadi.shutdown.db_close_failed", err=str(exc))
-    arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-    app.state.arq_redis = arq_redis
-    if settings.fhir_mcp_enabled:
-        mcp = build_fhir_mcp_server(settings)
-        await mcp.start()
-        app.state.fhir_mcp = mcp
-    yield
-    if app.state.fhir_mcp is not None:
-        await app.state.fhir_mcp.stop()
-    await arq_redis.close()
-    await close_pool(pool)
-    logger.info("shadi.shutdown")
 
 
 app = FastAPI(
