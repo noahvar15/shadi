@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import importlib
+import os
 from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Defaults for CI / bare shells so ``get_settings()`` succeeds when tests run without ``.env``."""
+    os.environ.setdefault(
+        "DATABASE_URL",
+        "postgresql+asyncpg://pytest:pytest@127.0.0.1:5432/pytest",
+    )
+    os.environ.setdefault("API_SECRET_KEY", "pytest-collection-default-secret-key-ok")
 
 
 def reload_api_modules() -> None:
