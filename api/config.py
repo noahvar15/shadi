@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     )
     intake_queue: str = Field(default="arq:intake", validation_alias="INTAKE_QUEUE")
     api_secret_key: str = Field(default="change-me", validation_alias="API_SECRET_KEY")
+    # DEP-1 (cross-track-dependencies): use until Noah #28 contract is merged in your fork
+    stub_case_intake: bool = Field(default=False, validation_alias="SHADI_STUB_CASE_INTAKE")
 
 
 @lru_cache
