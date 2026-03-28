@@ -1,4 +1,4 @@
-"""arq worker settings — run: ``arq tasks.worker.WorkerSettings``."""
+"""arq worker settings: DB pool in job context for ``run_diagnostic_pipeline``."""
 
 from __future__ import annotations
 
@@ -10,29 +10,23 @@ from api.config import get_settings
 from api.db import close_pool, init_pool
 from tasks.pipeline import run_diagnostic_pipeline
 
-
-def _worker_redis_and_queue() -> tuple[RedisSettings, str]:
-    s = get_settings()
-    return RedisSettings.from_dsn(s.redis_url), s.intake_queue
-
-
-_redis_settings, _queue_name = _worker_redis_and_queue()
+_settings = get_settings()
 
 
 async def startup(ctx: dict[str, Any]) -> None:
-    settings = get_settings()
-    ctx["pool"] = await init_pool(settings.database_url)
+    """Open the asyncpg pool and store it on the arq job context."""
+    ctx["pool"] = await init_pool(_settings.database_url)
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
-    pool = ctx.get("pool")
-    if pool is not None:
-        await close_pool(pool)
+    """Close the pool created in ``startup``."""
+    await close_pool(ctx.get("pool"))
 
 
 class WorkerSettings:
+    """arq ``Worker`` constructor kwargs for ``arq tasks.worker.WorkerSettings``."""
     functions = [run_diagnostic_pipeline]
+    redis_settings = RedisSettings.from_dsn(_settings.redis_url)
+    queue_name = _settings.intake_queue
     on_startup = startup
     on_shutdown = shutdown
-    redis_settings = _redis_settings
-    queue_name = _queue_name
