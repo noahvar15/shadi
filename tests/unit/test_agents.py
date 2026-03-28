@@ -638,6 +638,28 @@ async def test_safety_veto_parse_error_fallback():
     assert result.parse_error is True
 
 
+async def test_safety_veto_partial_response_is_fail_closed():
+    """LLM returning fewer decisions than recommendations triggers parse_error and vetoes all."""
+    case = fresh_case()
+    report = _make_report(["Order ECG", "Draw troponin", "CT-PA to rule out PE"])
+
+    # phi4 returns only 1 decision for 3 recommendations
+    partial_payload = json.dumps({
+        "decisions": [
+            {"recommendation": "Order ECG", "vetoed": False, "reason": None, "contraindication_codes": []},
+        ]
+    })
+    with patch("agents.safety.veto_agent.call_chat", AsyncMock(return_value=partial_payload)):
+        with patch("agents.safety.veto_agent.settings") as mock_settings:
+            mock_settings.MOCK_LLM = False
+            mock_settings.OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
+            result = await SafetyVetoAgent().run(case, report)
+
+    assert result.parse_error is True
+    assert len(result.decisions) == 3
+    assert all(d.vetoed for d in result.decisions)
+
+
 async def test_safety_veto_empty_report_returns_empty_decisions():
     """A report with no diagnoses (no next_steps) returns an empty decisions list."""
     case = fresh_case()

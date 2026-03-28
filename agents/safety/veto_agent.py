@@ -263,31 +263,35 @@ class SafetyVetoAgent(BaseAgent[SafetyResult]):
         decisions:
             One ``VetoDecision`` per recommendation.
         parse_error:
-            ``True`` when the response could not be parsed. All decisions are
-            returned as ``vetoed=True`` (fail-closed) so the orchestrator halts
-            safely rather than silently passing an unreviewed recommendation.
+            ``True`` when the response could not be parsed or was truncated.
+            All decisions are returned as ``vetoed=True`` (fail-closed) so the
+            orchestrator halts safely rather than silently passing an
+            unreviewed recommendation.
         """
         try:
             payload = json.loads(raw)
             raw_decisions: list[dict] = payload.get("decisions", [])
+            if len(raw_decisions) < len(recommendations):
+                raise ValueError(
+                    f"phi4 returned {len(raw_decisions)} decision(s) for "
+                    f"{len(recommendations)} recommendation(s); "
+                    "partial response treated as parse error"
+                )
             decisions: list[VetoDecision] = []
             for i, rec in enumerate(recommendations):
-                if i < len(raw_decisions):
-                    entry = raw_decisions[i]
-                    decisions.append(
-                        VetoDecision(
-                            recommendation=rec,
-                            vetoed=bool(entry.get("vetoed", False)),
-                            reason=entry.get("reason") or None,
-                            contraindication_codes=list(
-                                entry.get("contraindication_codes", [])
-                            ),
-                        )
+                entry = raw_decisions[i]
+                decisions.append(
+                    VetoDecision(
+                        recommendation=rec,
+                        vetoed=bool(entry.get("vetoed", False)),
+                        reason=entry.get("reason") or None,
+                        contraindication_codes=list(
+                            entry.get("contraindication_codes", [])
+                        ),
                     )
-                else:
-                    decisions.append(VetoDecision(recommendation=rec, vetoed=False))
+                )
             return decisions, False
-        except (json.JSONDecodeError, KeyError, TypeError):
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             logger.error(
                 "safety_veto.parse_error",
                 raw_preview=raw[:200],
