@@ -51,23 +51,29 @@ flowchart TD
 
 ---
 
-## The LoRA Adapter Trick
+## Model Stack
 
-Rather than loading four separate 70B models (~160 GB), Shadi loads a single **Meditron-70B** base in FP4 (~38 GB) and hot-swaps four lightweight LoRA adapters (~2 GB each) on top. vLLM supports this natively via `--enable-lora`. The result: four genuinely differentiated specialist models for the memory cost of one.
+Two inference servers run side-by-side. vLLM handles the specialists (LoRA hot-swap required); Ollama handles everything else. Both expose an OpenAI-compatible `/v1` API — agents route to the correct server via `inference_url` and `model` class attributes. See [ADR-002](docs/decisions/adr-002-model-assignments.md) for full rationale.
 
-```
-Base model (FP4):   ~38 GB
-Cardiology LoRA:     ~2 GB
-Neurology LoRA:      ~2 GB
-Pulmonology LoRA:    ~2 GB
-Toxicology LoRA:     ~2 GB
-Evidence + Veto:    ~10 GB  (lighter models)
-Orchestrator:        ~4 GB
-─────────────────────────
-Total:             ~60 GB  (fits in 128 GB unified memory with headroom)
-```
+| Agent | Model | Server | Approx VRAM |
+|---|---|---|---|
+| Image analysis | `medgemma:27b` | Ollama | ~16 GB |
+| Intake | `qwen2.5:7b` | Ollama | ~4.5 GB |
+| Specialists ×4 (base) | `meditron:70b` FP4 | vLLM | ~38 GB |
+| Specialist LoRA adapters ×4 | cardiology / neurology / pulmonology / toxicology | vLLM | ~8 GB |
+| Evidence (retrieval) | `nomic-embed-text` | Ollama | ~0.5 GB |
+| Evidence (claim eval) | `meditron:70b` (reuse) | vLLM | — |
+| Safety veto | `phi4:14b` | Ollama | ~8 GB |
+| Orchestrator synthesis | `deepseek-r1:32b` | Ollama | ~19 GB |
+| **Model subtotal** | | | **~94 GB** |
+| OS + services | | | ~15–20 GB |
+| **Grand total** | | | **~109–114 GB** |
 
-This is only possible on a machine with sufficient unified memory — a laptop OOMs at first model load.
+The DGX Spark's 128 GB unified memory leaves ~14–19 GB headroom for the evidence corpus index and concurrent case spikes. A laptop OOMs before the first specialist model finishes loading.
+
+### The LoRA Adapter Trick
+
+The four specialist agents share a single `meditron:70b` base load in FP4 (~38 GB). vLLM hot-swaps a domain LoRA adapter (~2 GB each) per request via `--enable-lora`. The result: four genuinely differentiated clinical specialists for the memory cost of one model. Loading four separate 70B weights would require ~160 GB — exceeding the hardware budget entirely.
 
 ---
 
@@ -117,10 +123,21 @@ cp .env.example .env
 docker compose up
 ```
 
+On first boot, pull the Ollama models (vLLM loads Meditron from the path in `.env`):
+
+```bash
+docker exec shadi-ollama-1 ollama pull medgemma:27b
+docker exec shadi-ollama-1 ollama pull qwen2.5:7b
+docker exec shadi-ollama-1 ollama pull nomic-embed-text
+docker exec shadi-ollama-1 ollama pull phi4:14b
+docker exec shadi-ollama-1 ollama pull deepseek-r1:32b
+```
+
 Services:
 - `http://localhost:8000` — FastAPI backend
 - `http://localhost:3000` — Physician dashboard
-- `http://localhost:8080` — vLLM inference server
+- `http://localhost:8080` — vLLM inference server (meditron:70b + LoRA)
+- `http://localhost:11434` — Ollama inference server (all other models)
 
 ### Development
 
@@ -166,6 +183,7 @@ shadi/
 | ADR | Decision |
 |---|---|
 | [ADR-001](docs/decisions/adr-001-architecture.md) | LoRA adapter strategy, A2A protocol design, air-gap rationale |
+| [ADR-002](docs/decisions/adr-002-model-assignments.md) | Ollama model assignments per agent, two-server strategy, memory budget |
 
 ---
 
