@@ -9,7 +9,8 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import cases, reports
+from api.config import Settings, build_fhir_mcp_server
+from api.routes import cases, fhir_routes, reports
 
 logger = structlog.get_logger()
 
@@ -17,8 +18,17 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("shadi.startup")
-    # TODO: initialise DB pool, Redis connection, vLLM client
+    settings = Settings()
+    app.state.settings = settings
+    app.state.fhir_mcp = None
+    if settings.fhir_mcp_enabled:
+        mcp = build_fhir_mcp_server(settings)
+        await mcp.start()
+        app.state.fhir_mcp = mcp
+    # TODO: initialise DB pool, Redis connection, vLLM client (#31)
     yield
+    if app.state.fhir_mcp is not None:
+        await app.state.fhir_mcp.stop()
     logger.info("shadi.shutdown")
 
 
@@ -39,6 +49,7 @@ app.add_middleware(
 
 app.include_router(cases.router, prefix="/cases", tags=["cases"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
+app.include_router(fhir_routes.router, prefix="/fhir", tags=["fhir"])
 
 
 @app.get("/health")

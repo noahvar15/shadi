@@ -141,6 +141,8 @@ Services:
 
 ### Development
 
+For **OAuth + FHIR Subscription + rest-hook** (#26–#27), the stack does not yet include a reference EHR in Compose; fixtures and unit tests cover most flows. A **planned** local FHIR server or minimal stub is described in [`docs/cross-track-dependencies.md`](docs/cross-track-dependencies.md) (section *Planned: Local FHIR or EHR stub (#25)*).
+
 ```bash
 # Python backend
 pip install -e ".[dev]"
