@@ -16,6 +16,15 @@ if [[ -z "${GH_TOKEN:-}" ]] && ! "$GH_BIN" auth status &>/dev/null 2>&1; then
   echo "  gh auth login" >&2
   echo "or:" >&2
   echo "  export GH_TOKEN=<personal access token with repo scope>" >&2
+  echo >&2
+  echo "Or open these compare links (logged into GitHub in your browser) to open each PR form:" >&2
+  owner="${REPO%%/*}"
+  repo="${REPO#*/}"
+  base_url="https://github.com/${owner}/${repo}/compare"
+  echo "  #31  ${base_url}/main...issue/31-api-lifespan-settings?expand=1" >&2
+  echo "  #32  ${base_url}/issue/31-api-lifespan-settings...issue/32-post-cases-intake?expand=1" >&2
+  echo "  #33  ${base_url}/issue/32-post-cases-intake...issue/33-reports-pipeline-stub?expand=1" >&2
+  echo "  #34  ${base_url}/issue/33-reports-pipeline-stub...issue/34-arq-worker-and-tests?expand=1" >&2
   exit 1
 fi
 
