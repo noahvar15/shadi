@@ -105,12 +105,18 @@ For skill discovery and installation, use the Vercel `find-skills` workflow capt
 
 | Skill | When to use |
 |---|---|
+| `api-design-principles` | New FastAPI routes, FHIR endpoint design |
 | `codebase-search` | Finding code by meaning when you don't know the exact symbol |
+| `dispatching-parallel-agents` | 2+ independent tasks that can run without shared state |
 | `find-skills` | Discovering and installing shared skills from the Vercel skills ecosystem |
 | `writing-plans` | Multi-step tasks or features with a spec/requirements |
 | `git-advanced-workflows` | Complex rebases, bisect, recovering commits |
+| `mcp-builder` | Changes to the FHIR MCP server in `fhir/` |
+| `python-performance-optimization` | Slow inference, memory pressure, profiling |
 | `receiving-code-review` | When acting on code review feedback |
 | `requesting-code-review` | After completing a feature or before merging |
+| `subagent-driven-development` | Executing an existing plan with independent sub-tasks |
+| `systematic-debugging` | Any bug, test failure, or unexpected behavior — before proposing fixes |
 | `using-git-worktrees` | Feature work that needs isolation from current workspace |
 | `verification-before-completion` | Before claiming work is done, fixed, or passing |
 

@@ -27,13 +27,46 @@ env/
 *.swp
 *.swo
 
-# AI tool config dirs — agent-specific, not shared
+# Skills — .agents/skills/ is committed intentionally so the team can clone and
+# get all skills without running bun x skills add. skills-lock.json is also
+# committed for reproducible installs via: bun x skills experimental_install
+#
+# Agent-specific symlink directories created by the skills CLI are NOT committed
+# (they point back to .agents/skills/ and need to be regenerated per machine).
+# Teammates restore them by running: bun x skills experimental_install
+.adal/
+.augment/
 .claude/
 .cursor/*
 !.cursor/agents/
 !.cursor/agents/**
 !.cursor/rules/
 !.cursor/rules/**
+.codebuddy/
+.commandcode/
+.continue/
+.cortex/
+.crush/
+.factory/
+.goose/
+.iflow/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.vibe/
+.windsurf/
+.zencoder/
 
 # macOS
 .DS_Store
