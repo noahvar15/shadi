@@ -10,15 +10,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tailwindcss/typography": "^0.5.19",
+    "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-query-devtools": "^5.95.2",
+    "axios": "^1.7.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.460.0",
     "next": "15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@tanstack/react-query": "^5.62.0",
-    "axios": "^1.7.0",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.5.4",
-    "lucide-react": "^0.460.0",
-    "recharts": "^2.13.3"
+    "recharts": "^2.13.3",
+    "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
