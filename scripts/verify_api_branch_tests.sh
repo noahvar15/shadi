@@ -5,6 +5,12 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 export PYTHONPATH="$ROOT"
 
+ORIGINAL_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+cleanup() {
+  git checkout "$ORIGINAL_BRANCH" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 PY=python3
 if [[ -x "$ROOT/.venv/bin/python" ]]; then
   PY="$ROOT/.venv/bin/python"

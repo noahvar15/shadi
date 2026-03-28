@@ -45,10 +45,16 @@ async def test_worker_shutdown_closes_pool_via_close_pool() -> None:
 
 
 def test_worker_queue_name_follows_intake_queue_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("INTAKE_QUEUE", "arq:custom-test-queue")
     import importlib
+
+    from api.config import get_settings
+
+    monkeypatch.setenv("INTAKE_QUEUE", "arq:custom-test-queue")
+    get_settings.cache_clear()
     import tasks.worker as tw
 
     importlib.reload(tw)
     assert tw.WorkerSettings.queue_name == "arq:custom-test-queue"
+    monkeypatch.delenv("INTAKE_QUEUE", raising=False)
+    get_settings.cache_clear()
     importlib.reload(tw)

@@ -1,4 +1,6 @@
-# API + arq worker image (minimal runtime deps — full dev install: pip install -e ".[dev]" locally)
+# API + arq worker image (minimal runtime deps — full dev install: pip install -e ".[dev]" locally).
+# Dependencies are listed explicitly (not `pip install .`) because the project root pulls vLLM/torch
+# and other GPU stacks that are not required for the HTTP API or arq worker.
 FROM python:3.11-slim-bookworm
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
@@ -9,7 +11,6 @@ COPY a2a ./a2a
 COPY api ./api
 COPY shadi_fhir ./shadi_fhir
 COPY tasks ./tasks
-COPY tests/fixtures/sample_report.json ./tests/fixtures/sample_report.json
 COPY pyproject.toml README.md ./
 
 RUN pip install --no-cache-dir --upgrade pip \
@@ -25,6 +26,10 @@ RUN pip install --no-cache-dir --upgrade pip \
     "arq>=0.26.0" \
     "asyncpg>=0.30.0" \
     "structlog>=24.4.0"
+
+RUN useradd --create-home --shell /bin/bash --uid 1000 app \
+    && chown -R app:app /app
+USER app
 
 ENV PYTHONPATH=/app
 EXPOSE 8000

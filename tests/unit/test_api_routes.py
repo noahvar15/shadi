@@ -11,6 +11,9 @@ from starlette.testclient import TestClient
 
 from tests.conftest import reload_api_modules
 
+# Minimal FHIR Bundle shape (stub intake still accepts a realistic document type).
+_MINIMAL_FHIR_BUNDLE = {"resourceType": "Bundle", "type": "collection", "entry": []}
+
 
 @contextmanager
 def _app_test_client(monkeypatch: pytest.MonkeyPatch, mock_conn: AsyncMock):
@@ -57,8 +60,13 @@ def mock_conn() -> AsyncMock:
 
 @pytest.fixture
 def api_client(monkeypatch: pytest.MonkeyPatch, mock_conn: AsyncMock):
-    with _app_test_client(monkeypatch, mock_conn) as triplet:
-        yield triplet
+    from api.config import get_settings
+
+    try:
+        with _app_test_client(monkeypatch, mock_conn) as triplet:
+            yield triplet
+    finally:
+        get_settings.cache_clear()
 
 
 def test_health_ok(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,7 +79,7 @@ def test_health_ok(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_post_cases_stub_queues_job(api_client) -> None:
     client, _mock_conn, mock_arq = api_client
-    r = client.post("/cases", json={})
+    r = client.post("/cases", json=_MINIMAL_FHIR_BUNDLE)
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "queued"

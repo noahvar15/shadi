@@ -149,3 +149,4 @@ async def test_run_diagnostic_pipeline_writes_report(monkeypatch: pytest.MonkeyP
     else:
         data = report_blob
     assert data["case_id"] == str(cid)
+    assert args[4] is None

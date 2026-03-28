@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from arq.connections import RedisSettings
@@ -10,6 +9,14 @@ from arq.connections import RedisSettings
 from api.config import get_settings
 from api.db import close_pool, init_pool
 from tasks.pipeline import run_diagnostic_pipeline
+
+
+def _worker_redis_and_queue() -> tuple[RedisSettings, str]:
+    s = get_settings()
+    return RedisSettings.from_dsn(s.redis_url), s.intake_queue
+
+
+_redis_settings, _queue_name = _worker_redis_and_queue()
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -27,7 +34,5 @@ class WorkerSettings:
     functions = [run_diagnostic_pipeline]
     on_startup = startup
     on_shutdown = shutdown
-    redis_settings = RedisSettings.from_dsn(
-        os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
-    )
-    queue_name = os.environ.get("INTAKE_QUEUE", "arq:intake")
+    redis_settings = _redis_settings
+    queue_name = _queue_name

@@ -10,7 +10,7 @@ import json
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from agents.schemas import CaseObject
 from api.config import Settings, get_settings
@@ -42,7 +42,7 @@ async def create_case(
     else:
         try:
             case = CaseObject.from_fhir_bundle(bundle)
-        except FHIRValidationError as e:
+        except (FHIRValidationError, ValidationError) as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
     case_json_str = json.dumps(case.model_dump(mode="json"))

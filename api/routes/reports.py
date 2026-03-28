@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
@@ -43,7 +42,4 @@ async def get_report(case_id: UUID, pool: PoolDep) -> DifferentialReport:
     if row["status"] != "complete" or row["report_json"] is None:
         raise HTTPException(status_code=404, detail="Report not ready")
 
-    payload: Any = row["report_json"]
-    if isinstance(payload, str):
-        return DifferentialReport.model_validate_json(payload)
-    return DifferentialReport.model_validate(payload)
+    return DifferentialReport.model_validate(row["report_json"])

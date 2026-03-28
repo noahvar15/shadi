@@ -66,6 +66,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["agents", "shadi_fhir", "a2a", "models", "api", "tasks"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"tasks/fixtures/sample_report.json" = "tasks/fixtures/sample_report.json"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
