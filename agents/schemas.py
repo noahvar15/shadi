@@ -118,6 +118,9 @@ class SafetyResult(AgentResult):
     """Result produced by the safety veto agent."""
 
     decisions: list[VetoDecision] = Field(default_factory=list)
+    # True when phi4's response could not be parsed; all decisions will be
+    # vetoed=True (fail-closed) so the orchestrator halts safely.
+    parse_error: bool = False
 
 
 class EvidenceResult(AgentResult):

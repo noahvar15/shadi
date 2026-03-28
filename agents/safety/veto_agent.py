@@ -28,22 +28,20 @@ from __future__ import annotations
 
 import json
 import time
-from typing import TYPE_CHECKING
 
 import structlog
 
 from agents._llm import call_chat
 from agents.base import BaseAgent
 from agents.schemas import (
+    Allergy,
     CaseObject,
     DifferentialReport,
+    Medication,
     SafetyResult,
     VetoDecision,
 )
 from config import settings
-
-if TYPE_CHECKING:
-    pass
 
 logger = structlog.get_logger()
 
@@ -85,7 +83,7 @@ Recommendations to evaluate:
 """
 
 
-def _format_medications(medications: list) -> str:
+def _format_medications(medications: list[Medication]) -> str:
     if not medications:
         return "None documented"
     lines = []
@@ -100,7 +98,7 @@ def _format_medications(medications: list) -> str:
     return "\n".join(lines)
 
 
-def _format_allergies(allergies: list) -> str:
+def _format_allergies(allergies: list[Allergy]) -> str:
     if not allergies:
         return "None documented"
     lines = []
@@ -136,16 +134,28 @@ class SafetyVetoAgent(BaseAgent[SafetyResult]):
     # Public interface — overrides BaseAgent.run to accept a DifferentialReport
     # -------------------------------------------------------------------------
 
-    async def run(  # type: ignore[override]
+    async def run(
         self,
         case: CaseObject,
-        report: DifferentialReport,
+        report: DifferentialReport | None = None,
     ) -> SafetyResult:
         """Run safety veto checking and return a ``SafetyResult``.
 
-        Overrides ``BaseAgent.run`` to accept the additional ``report``
-        argument. Timing and structured logging mirror the base implementation.
+        Parameters
+        ----------
+        case:
+            The patient case providing ``medications`` and ``allergies``.
+        report:
+            Required. The synthesized differential report whose
+            ``top_diagnoses[*].next_steps`` are evaluated. Passing ``None``
+            raises ``ValueError`` immediately so callers get a clear error
+            rather than a silent no-op.
         """
+        if report is None:
+            raise ValueError(
+                "SafetyVetoAgent.run requires a DifferentialReport; "
+                "call agent.run(case, report) not agent.run(case)"
+            )
         start = time.monotonic()
         log = logger.bind(agent=self.name, domain=self.domain, model=self.model)
         log.info("agent.start", case_id=case.case_id)
@@ -229,11 +239,12 @@ class SafetyVetoAgent(BaseAgent[SafetyResult]):
             mock_domain=self.domain,
         )
 
-        decisions = self._parse_decisions(raw, recommendations)
+        decisions, parse_error = self._parse_decisions(raw, recommendations)
         return SafetyResult(
             decisions=decisions,
             agent_name=self.name,
             case_id=case.case_id,
+            parse_error=parse_error,
         )
 
     # -------------------------------------------------------------------------
@@ -244,11 +255,17 @@ class SafetyVetoAgent(BaseAgent[SafetyResult]):
         self,
         raw: str,
         recommendations: list[str],
-    ) -> list[VetoDecision]:
-        """Parse phi4's JSON response into a list of ``VetoDecision`` objects.
+    ) -> tuple[list[VetoDecision], bool]:
+        """Parse phi4's JSON response into a ``(decisions, parse_error)`` tuple.
 
-        Falls back to all-safe decisions if the response cannot be parsed, so
-        a malformed LLM reply never silently blocks the pipeline.
+        Returns
+        -------
+        decisions:
+            One ``VetoDecision`` per recommendation.
+        parse_error:
+            ``True`` when the response could not be parsed. All decisions are
+            returned as ``vetoed=True`` (fail-closed) so the orchestrator halts
+            safely rather than silently passing an unreviewed recommendation.
         """
         try:
             payload = json.loads(raw)
@@ -269,10 +286,13 @@ class SafetyVetoAgent(BaseAgent[SafetyResult]):
                     )
                 else:
                     decisions.append(VetoDecision(recommendation=rec, vetoed=False))
-            return decisions
+            return decisions, False
         except (json.JSONDecodeError, KeyError, TypeError):
-            logger.warning(
+            logger.error(
                 "safety_veto.parse_error",
                 raw_preview=raw[:200],
             )
-            return [VetoDecision(recommendation=rec, vetoed=False) for rec in recommendations]
+            return (
+                [VetoDecision(recommendation=rec, vetoed=True) for rec in recommendations],
+                True,
+            )

@@ -623,7 +623,7 @@ async def test_safety_veto_clean_report_all_not_vetoed():
 
 
 async def test_safety_veto_parse_error_fallback():
-    """Malformed LLM response falls back to all vetoed=False, does not crash."""
+    """Malformed LLM response sets parse_error=True and vetoes all decisions (fail-closed)."""
     case = fresh_case()
     report = _make_report(["Order ECG"])
 
@@ -634,7 +634,8 @@ async def test_safety_veto_parse_error_fallback():
             result = await SafetyVetoAgent().run(case, report)
 
     assert len(result.decisions) == 1
-    assert result.decisions[0].vetoed is False
+    assert result.decisions[0].vetoed is True
+    assert result.parse_error is True
 
 
 async def test_safety_veto_empty_report_returns_empty_decisions():
