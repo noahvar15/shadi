@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { isAxiosError } from 'axios'
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000',
@@ -12,8 +12,12 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    const message = error.response?.data?.detail ?? error.message ?? 'Unknown error'
-    return Promise.reject(new Error(message))
+  (error: unknown) => {
+    // Preserve the original AxiosError so callers can inspect status, headers,
+    // and use isAxiosError() for conditional handling (401 vs 500 vs network).
+    if (isAxiosError(error)) {
+      return Promise.reject(error)
+    }
+    return Promise.reject(new Error('Unknown error'))
   }
 )

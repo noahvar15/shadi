@@ -9,11 +9,21 @@ export function DarkModeToggle() {
 
   useEffect(() => {
     setMounted(true)
+    const mql = window.matchMedia('(prefers-color-scheme: dark)')
     const stored = localStorage.getItem('theme')
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const dark = stored ? stored === 'dark' : prefersDark
+    const dark = stored ? stored === 'dark' : mql.matches
     setIsDark(dark)
     document.documentElement.classList.toggle('dark', dark)
+
+    // Follow OS theme changes when the user hasn't set an explicit preference
+    const onSystemChange = (e: MediaQueryListEvent) => {
+      if (!localStorage.getItem('theme')) {
+        setIsDark(e.matches)
+        document.documentElement.classList.toggle('dark', e.matches)
+      }
+    }
+    mql.addEventListener('change', onSystemChange)
+    return () => mql.removeEventListener('change', onSystemChange)
   }, [])
 
   const toggle = () => {

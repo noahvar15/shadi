@@ -35,6 +35,7 @@ export default function RootLayout({
                 <input
                   type="search"
                   placeholder="Search patients..."
+                  aria-label="Search patients"
                   disabled
                   className="w-full px-3 py-1.5 text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 opacity-50 cursor-not-allowed"
                 />
@@ -53,7 +54,16 @@ export default function RootLayout({
             </div>
           </nav>
 
-          <main>{children}</main>
+          <div className="flex min-h-[calc(100vh-3.5rem)]">
+            {/* Sidebar stub — populated in future iterations */}
+            <aside
+              id="sidebar"
+              aria-label="Main navigation"
+              className="hidden md:flex md:w-56 flex-col flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800"
+            />
+
+            <main className="flex-1 min-w-0">{children}</main>
+          </div>
         </Providers>
       </body>
     </html>
