@@ -14,7 +14,11 @@ def _asyncpg_dsn(database_url: str) -> str:
 
 async def init_pool(database_url: str) -> asyncpg.Pool:
     pool = await asyncpg.create_pool(_asyncpg_dsn(database_url), min_size=1, max_size=10)
-    await ensure_schema(pool)
+    try:
+        await ensure_schema(pool)
+    except Exception:
+        await pool.close()
+        raise
     return pool
 
 

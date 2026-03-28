@@ -26,6 +26,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.fhir_mcp = None
     pool = await init_pool(settings.database_url)
     app.state.pool = pool
+    try:
+        arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        app.state.arq_redis = arq_redis
+        try:
+            yield
+        finally:
+            await arq_redis.close()
+    finally:
+        await close_pool(pool)
     arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
     app.state.arq_redis = arq_redis
     if settings.fhir_mcp_enabled:
