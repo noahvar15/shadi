@@ -194,6 +194,29 @@ _MOCK_RESPONSES: dict[str, str] = {
             ]
         }
     ),
+    # Synthesis response used by the Orchestrator when calling deepseek-r1:32b.
+    "orchestrator": json.dumps(
+        {
+            "top_diagnoses": [
+                {
+                    "rank": 1,
+                    "display": "Acute myocardial infarction (mock)",
+                    "confidence": 0.65,
+                    "snomed_code": "57054005",
+                    "next_steps": ["12-lead ECG", "Troponin I/T", "Cardiology consult"],
+                    "flags": ["MOCK"],
+                },
+                {
+                    "rank": 2,
+                    "display": "Pulmonary embolism (mock)",
+                    "confidence": 0.20,
+                    "snomed_code": "59282003",
+                    "next_steps": ["D-dimer", "CT pulmonary angiography"],
+                    "flags": ["MOCK"],
+                },
+            ]
+        }
+    ),
 }
 
 _MOCK_FALLBACK = json.dumps(
