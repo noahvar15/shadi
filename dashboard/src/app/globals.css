@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme tokens — controlled exclusively via the .dark class on <html>.
+   DarkModeToggle reads system preference on mount and applies the class. */
+:root {
+  --background: #f8fafc;      /* slate-50 — off-white page bg */
+  --surface: #ffffff;          /* card/panel bg */
+  --foreground: #0f172a;       /* slate-900 */
+  --foreground-muted: #64748b; /* slate-500 */
+  --border: #e2e8f0;           /* slate-200 */
+  --sidebar-width: 14rem;
+}
+
+.dark {
+  --background: #0f172a;       /* slate-900 */
+  --surface: #1e293b;          /* slate-800 */
+  --foreground: #f1f5f9;       /* slate-100 */
+  --foreground-muted: #94a3b8; /* slate-400 */
+  --border: #334155;           /* slate-700 */
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+}
