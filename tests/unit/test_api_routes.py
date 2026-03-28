@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import importlib
 from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
 from starlette.testclient import TestClient
+
+from tests.conftest import reload_api_modules
 
 
 @contextmanager
@@ -39,11 +40,9 @@ def _app_test_client(monkeypatch: pytest.MonkeyPatch, mock_conn: AsyncMock):
         patch("arq.create_pool", AsyncMock(return_value=mock_arq)),
         patch("api.db.close_pool", AsyncMock()),
     ):
-        import api.config as api_config
+        reload_api_modules()
         import api.main as api_main
 
-        importlib.reload(api_config)
-        importlib.reload(api_main)
         with TestClient(api_main.app) as client:
             yield client, mock_conn, mock_arq
 
