@@ -97,21 +97,28 @@ pytest tests/
 
 Project-level skills live in `skills/`. They are tracked in git and shared across the team. When a task matches a skill, read the `SKILL.md` and follow it.
 
+Only list skills in this file if they are actually tracked in this repository. Do not point agents at user-home-only skills or editor-specific symlink farms.
+
+Repo-shared Cursor context lives in `.cursor/rules/` and `.cursor/agents/`. Prefer those tracked files over user-home copies such as `~/.cursor/agents/`.
+
+For skill discovery and installation, use the Vercel `find-skills` workflow captured in `skills/find-skills/SKILL.md`. The upstream source is `https://skills.sh/vercel-labs/skills/find-skills`.
+
 | Skill | When to use |
 |---|---|
-| `systematic-debugging` | Any bug, test failure, or unexpected behavior — before proposing fixes |
-| `verification-before-completion` | Before claiming work is done, fixed, or passing |
-| `writing-plans` | Multi-step tasks or features with a spec/requirements |
-| `dispatching-parallel-agents` | 2+ independent tasks that can run without shared state |
-| `subagent-driven-development` | Executing an existing plan with independent sub-tasks |
-| `python-performance-optimization` | Slow inference, memory pressure, profiling |
 | `api-design-principles` | New FastAPI routes, FHIR endpoint design |
-| `mcp-builder` | Changes to the FHIR MCP server in `shadi_fhir/` |
-| `requesting-code-review` | After completing a feature or before merging |
-| `receiving-code-review` | When acting on code review feedback |
-| `git-advanced-workflows` | Complex rebases, bisect, recovering commits |
-| `using-git-worktrees` | Feature work that needs isolation from current workspace |
 | `codebase-search` | Finding code by meaning when you don't know the exact symbol |
+| `dispatching-parallel-agents` | 2+ independent tasks that can run without shared state |
+| `find-skills` | Discovering and installing shared skills from the Vercel skills ecosystem |
+| `writing-plans` | Multi-step tasks or features with a spec/requirements |
+| `git-advanced-workflows` | Complex rebases, bisect, recovering commits |
+| `mcp-builder` | Changes to the FHIR MCP server in `shadi_fhir/` |
+| `python-performance-optimization` | Slow inference, memory pressure, profiling |
+| `receiving-code-review` | When acting on code review feedback |
+| `requesting-code-review` | After completing a feature or before merging |
+| `subagent-driven-development` | Executing an existing plan with independent sub-tasks |
+| `systematic-debugging` | Any bug, test failure, or unexpected behavior — before proposing fixes |
+| `using-git-worktrees` | Feature work that needs isolation from current workspace |
+| `verification-before-completion` | Before claiming work is done, fixed, or passing |
 
 ---
 
@@ -127,3 +134,19 @@ Agents communicate via structured messages in `a2a/`. Valid message types: `ENDO
 2. Evidence grounding runs after specialist reasoning, before debate.
 3. The safety veto runs last, after consensus, and can block any recommendation unconditionally.
 4. The LoRA adapter for each specialist must match the specialty's training domain exactly.
+
+---
+
+## Learned User Preferences
+
+- Always use `bunx` instead of `npx` for all CLI tools in this project (e.g. `bunx skills add`, not `npx skills add`).
+- Each GitHub issue gets its own branch, git worktree (under `.worktrees/` — gitignored), and a separate PR; never bundle multiple issues into one branch.
+
+---
+
+## Learned Workspace Facts
+
+- Subagent model routing: `planner` → `claude-4.6-sonnet-medium-thinking` (strategic decomposition); `worker` → `gpt-5.4-medium` (Python agents, FHIR, A2A, API, models, infra — never `dashboard/`); `ui-engineer` → `claude-sonnet-4-6` (all work inside `dashboard/` exclusively); `reviewer` → `claude-opus-4-6` (verification and code review).
+- Project-level skills for team sharing live in `.agents/skills/` (committed to git). `.cursor/` is gitignored. `.claude/skills/` is not used — the team does not use Claude.
+- Dashboard design system (defined in `tailwind.config.ts` on the scaffold branch, inherited by all downstream issues): Vercel/Linear aesthetic; Tailwind `darkMode: 'class'`; slate-950/white base; emerald-400/500 primary accent (high confidence, CTAs); red-500/600 safety veto/danger; amber-400/500 warnings/divergent agents; monospace for clinical scores and numbers, sans-serif for prose.
+- Dashboard issue dependency order: #41 (scaffold) must merge before #42 (case intake) and #43 (report view); #43 must merge before #44 (live updates).

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -53,7 +53,7 @@ class CaseObject(BaseModel):
     case_id: UUID = Field(default_factory=uuid4)
     patient_id: str
     encounter_id: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # Structured from triage notes by the intake agent
     chief_complaint: str
@@ -62,6 +62,9 @@ class CaseObject(BaseModel):
     observations: list[Observation] = Field(default_factory=list)
     medications: list[Medication] = Field(default_factory=list)
     allergies: list[Allergy] = Field(default_factory=list)
+
+    # Imaging attachments (URLs or local paths) analysed by ImageAnalysisAgent
+    imaging_attachments: list[str] = Field(default_factory=list)
 
     # Additional context
     age: int | None = None
@@ -92,7 +95,7 @@ class AgentResult(BaseModel):
 
     agent_name: str
     case_id: UUID
-    produced_at: datetime = Field(default_factory=datetime.utcnow)
+    produced_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -115,13 +118,22 @@ class SafetyResult(AgentResult):
     """Result produced by the safety veto agent."""
 
     decisions: list[VetoDecision] = Field(default_factory=list)
+    # True when phi4's response could not be parsed; all decisions will be
+    # vetoed=True (fail-closed) so the orchestrator halts safely.
+    parse_error: bool = False
+
+
+class EvidenceResult(AgentResult):
+    """Result produced by the evidence grounding agent."""
+
+    grounded_diagnoses: list[DiagnosisCandidate] = Field(default_factory=list)
 
 
 class DifferentialReport(BaseModel):
     """Final synthesized output written as a FHIR DiagnosticReport."""
 
     case_id: UUID
-    synthesized_at: datetime = Field(default_factory=datetime.utcnow)
+    synthesized_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     top_diagnoses: list[DiagnosisCandidate] = Field(default_factory=list)
     vetoed_recommendations: list[VetoDecision] = Field(default_factory=list)
     consensus_level: float = Field(ge=0.0, le=1.0, default=0.0)

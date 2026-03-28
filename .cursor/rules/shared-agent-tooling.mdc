@@ -1,0 +1,7 @@
+# Shared Agent Tooling
+
+- `AGENTS.md`, `skills/`, `.cursor/rules/`, and `.cursor/agents/` are the repo-shared source of truth for agent behavior.
+- Prefer tracked repo files over user-home state such as `~/.cursor/agents/` or tool-specific dot-directories.
+- When a task is about finding or installing skills, use [`skills/find-skills/SKILL.md`](../../skills/find-skills/SKILL.md) and prefer the Vercel Skills ecosystem.
+- Do not treat empty tool-specific directories like `.claude/`, `.roo/`, or `.augment/` as canonical project configuration.
+- If a new shared workflow is added for the team, put it in `skills/` or `.cursor/rules/`, not in a home-directory-only path.

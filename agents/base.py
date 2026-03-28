@@ -86,6 +86,7 @@ class BaseAgent(ABC, Generic[TResult]):
         self._log.info("agent.start", case_id=case.case_id)
         try:
             result = await self.reason(case)
+            self.post_reason(case, result)
             elapsed_ms = (time.monotonic() - start) * 1000
             self._log.info(
                 "agent.complete",
@@ -119,8 +120,21 @@ class BaseAgent(ABC, Generic[TResult]):
         spec. See ADR-002.
 
         Side effects belong in the orchestrator, not in ``reason``.
+
+        If an agent must update the ``CaseObject`` after structured output is
+        known (e.g. intake codes), implement :meth:`post_reason` instead of
+        mutating ``case`` inside ``reason``.
         """
         ...
+
+    def post_reason(self, case: CaseObject, result: TResult) -> None:
+        """Run after ``reason`` returns; default no-op.
+
+        Use for side effects that should not live inside ``reason`` — for
+        example merging intake-extracted codes onto ``case`` while keeping
+        ``reason`` free of shared-state writes.
+        """
+        return None
 
     def describe(self) -> dict[str, Any]:
         """Return a summary of this agent for logging and A2A messages."""

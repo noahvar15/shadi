@@ -37,6 +37,11 @@ env/
 .adal/
 .augment/
 .claude/
+.cursor/*
+!.cursor/agents/
+!.cursor/agents/**
+!.cursor/rules/
+!.cursor/rules/**
 .codebuddy/
 .commandcode/
 .continue/
@@ -62,8 +67,6 @@ env/
 .vibe/
 .windsurf/
 .zencoder/
-/skills/
-.cursor/
 
 # macOS
 .DS_Store
@@ -90,3 +93,4 @@ htmlcov/
 
 # Docker
 *.log
+.worktrees/
