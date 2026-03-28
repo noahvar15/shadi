@@ -7,8 +7,6 @@ from functools import lru_cache
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from shadi_fhir.mcp_server import FHIRMCPServer
-
 _PLACEHOLDER_API_SECRETS = frozenset(
     {
         "",
@@ -62,6 +60,15 @@ class Settings(BaseSettings):
     )
     fhir_webhook_secret: str = Field(default="", validation_alias="FHIR_WEBHOOK_SECRET")
 
+    @field_validator("fhir_webhook_secret", mode="after")
+    @classmethod
+    def fhir_webhook_secret_not_placeholder(cls, v: str) -> str:
+        t = v.strip().lower()
+        if t and t in _PLACEHOLDER_API_SECRETS:
+            msg = "FHIR_WEBHOOK_SECRET must not be a placeholder or weak default (same rules as API_SECRET_KEY)."
+            raise ValueError(msg)
+        return v
+
     @property
     def fhir_mcp_enabled(self) -> bool:
         return bool(
@@ -74,7 +81,9 @@ class Settings(BaseSettings):
         )
 
 
-def build_fhir_mcp_server(settings: Settings) -> FHIRMCPServer:
+def build_fhir_mcp_server(settings: Settings) -> "FHIRMCPServer":
+    from shadi_fhir.mcp_server import FHIRMCPServer
+
     return FHIRMCPServer(
         settings.fhir_base_url,
         settings.fhir_client_id,

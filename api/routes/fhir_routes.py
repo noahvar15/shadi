@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Request
 
-from agents.schemas import CaseObject
 from shadi_fhir.exceptions import FHIRValidationError
 
 if TYPE_CHECKING:
@@ -71,12 +70,15 @@ def _get_settings(request: Request):
 
 
 @router.post("/notify")
-async def fhir_notify(request: Request) -> CaseObject:
+async def fhir_notify(request: Request) -> dict[str, str]:
     """Rest-hook endpoint for FHIR Subscription notifications (Encounter).
 
     Expects the raw JSON Bundle as the body and an ``X-Shadi-Signature`` header
     (HMAC-SHA256 over the raw body using ``FHIR_WEBHOOK_SECRET``). Malformed bundles
     produce **400** so senders do not retry as if the server failed.
+
+    Returns a minimal acknowledgment (not the full ``CaseObject``) to avoid exposing
+    internal shapes to the EHR sender.
     """
     settings = _get_settings(request)
     raw = await request.body()
@@ -94,6 +96,7 @@ async def fhir_notify(request: Request) -> CaseObject:
 
     mcp = _get_mcp(request)
     try:
-        return await mcp.handle_notification(bundle)
+        await mcp.handle_notification(bundle)
     except FHIRValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "accepted"}

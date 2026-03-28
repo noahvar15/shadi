@@ -52,6 +52,27 @@ def test_verify_fhir_webhook_body_empty_secret_503() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fhir_notify_returns_accepted_on_success() -> None:
+    app = FastAPI()
+    app.include_router(router, prefix="/fhir")
+    app.state.settings = MagicMock(fhir_webhook_secret="notify-secret")
+    mcp = MagicMock()
+    mcp.handle_notification = AsyncMock(return_value=MagicMock())
+    app.state.fhir_mcp = mcp
+
+    body = b'{"resourceType":"Bundle","type":"collection","entry":[]}'
+    headers = {WEBHOOK_SIGNATURE_HEADER: _sign(body, "notify-secret")}
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post("/fhir/notify", content=body, headers=headers)
+
+    assert r.status_code == 200
+    assert r.json() == {"status": "accepted"}
+    mcp.handle_notification.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_fhir_notify_returns_400_on_validation_error() -> None:
     app = FastAPI()
     app.include_router(router, prefix="/fhir")
