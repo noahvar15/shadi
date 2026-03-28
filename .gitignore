@@ -29,7 +29,11 @@ env/
 
 # AI tool config dirs — agent-specific, not shared
 .claude/
-.cursor/
+.cursor/*
+!.cursor/agents/
+!.cursor/agents/**
+!.cursor/rules/
+!.cursor/rules/**
 
 # macOS
 .DS_Store
