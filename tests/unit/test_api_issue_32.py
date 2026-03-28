@@ -69,7 +69,7 @@ def test_post_cases_stub_returns_queued_and_enqueues(monkeypatch: pytest.MonkeyP
     body = r.json()
     assert body["status"] == "queued"
     UUID(body["case_id"])
-    mock_conn.execute.assert_awaited_once()
+    assert mock_conn.execute.await_count == 2
     mock_arq.enqueue_job.assert_awaited_once()
     call = mock_arq.enqueue_job.await_args
     assert call.args[0] == "tasks.pipeline.run_diagnostic_pipeline"

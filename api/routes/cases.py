@@ -6,6 +6,7 @@ DEP-1: full ``CaseObject.from_fhir_bundle`` depends on Noah #28 normalizer contr
 
 from __future__ import annotations
 
+import json
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -44,6 +45,7 @@ async def create_case(
         except FHIRValidationError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
+    case_json_str = json.dumps(case.model_dump(mode="json"))
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -51,8 +53,8 @@ async def create_case(
             VALUES ($1, $2, $3::jsonb)
             """,
             case.case_id,
-            "queued",
-            case.model_dump(mode="json"),
+            "pending_enqueue",
+            case_json_str,
         )
 
     await arq_redis.enqueue_job(
@@ -60,5 +62,14 @@ async def create_case(
         str(case.case_id),
         _queue_name=settings.intake_queue,
     )
+
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE cases SET status = $2, updated_at = NOW() WHERE id = $1
+            """,
+            case.case_id,
+            "queued",
+        )
 
     return CaseQueuedResponse(case_id=str(case.case_id), status="queued")
