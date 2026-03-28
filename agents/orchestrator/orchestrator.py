@@ -14,6 +14,7 @@ import asyncio
 import json
 
 import structlog
+from pydantic import ValidationError
 
 from a2a.debate import DebateManager
 from a2a.protocol import A2AMessage, MessageIntent
@@ -88,7 +89,7 @@ class Orchestrator:
         round_ = debate.open_round()
         for sr in specialist_results:
             for dx in sr.diagnoses:
-                if dx.rank == 1:
+                if dx.rank == 1 and dx.confidence >= 0.4:
                     debate.add_message(A2AMessage(
                         sender=sr.agent_name,
                         recipient="orchestrator",
@@ -101,7 +102,7 @@ class Orchestrator:
                             f"(confidence {dx.confidence:.2f})"
                         ),
                     ))
-                if dx.confidence < 0.4:
+                elif dx.confidence < 0.4:
                     debate.add_message(A2AMessage(
                         sender=sr.agent_name,
                         recipient="orchestrator",
@@ -149,8 +150,16 @@ class Orchestrator:
             response_format={"type": "json_object"},
             mock_domain="orchestrator",
         )
-        payload = json.loads(raw)
-        top_diagnoses = [DiagnosisCandidate(**d) for d in payload.get("top_diagnoses", [])]
+        try:
+            payload = json.loads(raw)
+            top_diagnoses = [DiagnosisCandidate(**d) for d in payload.get("top_diagnoses", [])]
+        except (json.JSONDecodeError, ValidationError) as exc:
+            log.error(
+                "orchestrator.synthesis.parse_error",
+                error=str(exc),
+                raw=raw,
+            )
+            top_diagnoses = []
         log.info("orchestrator.synthesis.done", top_diagnoses_count=len(top_diagnoses))
 
         report = DifferentialReport(
