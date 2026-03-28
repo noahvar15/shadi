@@ -97,21 +97,28 @@ pytest tests/
 
 Project-level skills live in `skills/`. They are tracked in git and shared across the team. When a task matches a skill, read the `SKILL.md` and follow it.
 
+Only list skills in this file if they are actually tracked in this repository. Do not point agents at user-home-only skills or editor-specific symlink farms.
+
+Repo-shared Cursor context lives in `.cursor/rules/` and `.cursor/agents/`. Prefer those tracked files over user-home copies such as `~/.cursor/agents/`.
+
+For skill discovery and installation, use the Vercel `find-skills` workflow captured in `skills/find-skills/SKILL.md`. The upstream source is `https://skills.sh/vercel-labs/skills/find-skills`.
+
 | Skill | When to use |
 |---|---|
-| `systematic-debugging` | Any bug, test failure, or unexpected behavior — before proposing fixes |
-| `verification-before-completion` | Before claiming work is done, fixed, or passing |
-| `writing-plans` | Multi-step tasks or features with a spec/requirements |
-| `dispatching-parallel-agents` | 2+ independent tasks that can run without shared state |
-| `subagent-driven-development` | Executing an existing plan with independent sub-tasks |
-| `python-performance-optimization` | Slow inference, memory pressure, profiling |
 | `api-design-principles` | New FastAPI routes, FHIR endpoint design |
-| `mcp-builder` | Changes to the FHIR MCP server in `shadi_fhir/` |
-| `requesting-code-review` | After completing a feature or before merging |
-| `receiving-code-review` | When acting on code review feedback |
-| `git-advanced-workflows` | Complex rebases, bisect, recovering commits |
-| `using-git-worktrees` | Feature work that needs isolation from current workspace |
 | `codebase-search` | Finding code by meaning when you don't know the exact symbol |
+| `dispatching-parallel-agents` | 2+ independent tasks that can run without shared state |
+| `find-skills` | Discovering and installing shared skills from the Vercel skills ecosystem |
+| `writing-plans` | Multi-step tasks or features with a spec/requirements |
+| `git-advanced-workflows` | Complex rebases, bisect, recovering commits |
+| `mcp-builder` | Changes to the FHIR MCP server in `shadi_fhir/` |
+| `python-performance-optimization` | Slow inference, memory pressure, profiling |
+| `receiving-code-review` | When acting on code review feedback |
+| `requesting-code-review` | After completing a feature or before merging |
+| `subagent-driven-development` | Executing an existing plan with independent sub-tasks |
+| `systematic-debugging` | Any bug, test failure, or unexpected behavior — before proposing fixes |
+| `using-git-worktrees` | Feature work that needs isolation from current workspace |
+| `verification-before-completion` | Before claiming work is done, fixed, or passing |
 
 ---
 

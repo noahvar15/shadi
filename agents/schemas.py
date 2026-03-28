@@ -63,6 +63,9 @@ class CaseObject(BaseModel):
     medications: list[Medication] = Field(default_factory=list)
     allergies: list[Allergy] = Field(default_factory=list)
 
+    # Imaging attachments (URLs or local paths) analysed by ImageAnalysisAgent
+    imaging_attachments: list[str] = Field(default_factory=list)
+
     # Additional context
     age: int | None = None
     sex: str | None = None  # "male" | "female" | "other"
