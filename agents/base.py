@@ -3,6 +3,22 @@
 Every agent in the pipeline — intake, specialist, evidence, safety, and
 orchestrator — extends BaseAgent. The contract is intentionally minimal:
 receive a CaseObject, produce a typed result, emit structured logs.
+
+Inference routing
+-----------------
+Two inference servers run in parallel (see ADR-002):
+
+- **vLLM** (``VLLM_BASE_URL``, default port 8080) — serves ``meditron:70b``
+  with hot-swappable LoRA adapters for the four specialist agents. Required
+  because Ollama does not support LoRA hot-swapping.
+
+- **Ollama** (``OLLAMA_BASE_URL``, default port 11434) — serves all other
+  models: ``medgemma:27b`` (image), ``qwen2.5:7b`` (intake),
+  ``nomic-embed-text`` (evidence retrieval), ``phi4:14b`` (safety veto),
+  ``deepseek-r1:32b`` (orchestrator).
+
+Both expose an OpenAI-compatible ``/v1`` endpoint. Subclasses select the
+correct server by setting ``inference_url`` and ``model`` as class attributes.
 """
 
 from __future__ import annotations
@@ -26,6 +42,22 @@ class BaseAgent(ABC, Generic[TResult]):
     Subclasses must implement `reason`. The `run` method wraps `reason` with
     timing, structured logging, and error normalization — subclasses should
     not override `run`.
+
+    Class attributes
+    ----------------
+    name : str
+        Human-readable name used in logs and A2A messages.
+    domain : str
+        Domain label used for LoRA adapter selection and message routing.
+    inference_url : str
+        Base URL of the inference server this agent calls. Set to
+        ``VLLM_BASE_URL`` for specialist agents (LoRA hot-swap) or
+        ``OLLAMA_BASE_URL`` for all other agents.
+    model : str
+        Model or adapter name passed to the inference endpoint.
+
+        Specialist agents use the LoRA adapter name (e.g. ``"cardiology"``);
+        all others use the Ollama model tag (e.g. ``"phi4:14b"``).
     """
 
     #: Human-readable name used in logs and A2A messages.
@@ -34,8 +66,14 @@ class BaseAgent(ABC, Generic[TResult]):
     #: Domain label used for LoRA adapter selection and message routing.
     domain: str
 
+    #: OpenAI-compatible inference endpoint (vLLM or Ollama). See module docstring.
+    inference_url: str
+
+    #: Model name or LoRA adapter name passed to the inference endpoint.
+    model: str
+
     def __init__(self) -> None:
-        self._log = logger.bind(agent=self.name, domain=self.domain)
+        self._log = logger.bind(agent=self.name, domain=self.domain, model=self.model)
 
     async def run(self, case: CaseObject) -> TResult:
         """Execute the agent and return a typed result.
@@ -69,15 +107,21 @@ class BaseAgent(ABC, Generic[TResult]):
         """Domain-specific reasoning over the case.
 
         Implementations should:
-        1. Build a domain-specific prompt from `case`
-        2. Call the vLLM inference endpoint with the correct LoRA adapter
+        1. Build a domain-specific prompt from ``case``
+        2. POST to ``self.inference_url`` using ``self.model`` as the model name
+           (OpenAI-compatible chat completions endpoint)
         3. Parse the response into a typed result object
         4. Return the result — do NOT write to any shared state here
 
-        Side effects belong in the orchestrator, not in `reason`.
+        Specialist agents call vLLM with a LoRA adapter name; all other agents
+        call Ollama with a model tag. The calling convention is identical for
+        both because both servers implement the OpenAI ``/v1/chat/completions``
+        spec. See ADR-002.
+
+        Side effects belong in the orchestrator, not in ``reason``.
         """
         ...
 
     def describe(self) -> dict[str, Any]:
         """Return a summary of this agent for logging and A2A messages."""
-        return {"name": self.name, "domain": self.domain}
+        return {"name": self.name, "domain": self.domain, "model": self.model}

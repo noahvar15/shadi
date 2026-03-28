@@ -1,9 +1,9 @@
 services:
 
-  # ─── Inference Server ────────────────────────────────────────────────────────
-  # Decision: vLLM chosen for native LoRA hot-swap support (--enable-lora) and
-  # OpenAI-compatible API surface. Alternatives: llama.cpp (no LoRA hot-swap),
-  # TGI (LoRA support experimental at time of writing).
+  # ─── Inference: vLLM (specialists) ───────────────────────────────────────────
+  # Serves meditron:70b in FP4 with four hot-swappable LoRA adapters
+  # (cardiology, neurology, pulmonology, toxicology). vLLM is used exclusively
+  # here because Ollama does not support LoRA hot-swapping. See ADR-002.
   vllm:
     image: vllm/vllm-openai:latest
     runtime: nvidia
@@ -32,6 +32,27 @@ services:
       timeout: 10s
       retries: 5
       start_period: 120s
+
+  # ─── Inference: Ollama (all non-specialist agents) ───────────────────────────
+  # Serves: medgemma:27b (image), qwen2.5:7b (intake), nomic-embed-text
+  # (evidence retrieval), phi4:14b (safety veto), deepseek-r1:32b (orchestrator).
+  # All expose an OpenAI-compatible /v1 endpoint identical to vLLM. See ADR-002.
+  ollama:
+    image: ollama/ollama:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   # ─── Database ────────────────────────────────────────────────────────────────
   postgres:
@@ -71,6 +92,13 @@ services:
       - DATABASE_URL=postgresql+asyncpg://shadi:shadi@postgres:5432/shadi
       - REDIS_URL=redis://redis:6379/0
       - VLLM_BASE_URL=http://vllm:8080/v1
+      - OLLAMA_BASE_URL=http://ollama:11434/v1
+      # Model assignments — see ADR-002
+      - IMAGE_MODEL=medgemma:27b
+      - INTAKE_MODEL=qwen2.5:7b
+      - EVIDENCE_EMBED_MODEL=nomic-embed-text
+      - SAFETY_MODEL=phi4:14b
+      - ORCHESTRATOR_MODEL=deepseek-r1:32b
     ports:
       - "8000:8000"
     depends_on:
@@ -79,6 +107,8 @@ services:
       redis:
         condition: service_healthy
       vllm:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     volumes:
       - ${EVIDENCE_INDEX_PATH:-/data/evidence_index}:/data/evidence_index:ro
@@ -103,3 +133,4 @@ services:
 
 volumes:
   postgres_data:
+  ollama_data:
