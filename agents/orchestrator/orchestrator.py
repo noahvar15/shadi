@@ -140,17 +140,18 @@ class Orchestrator:
             "consensus_scores": consensus,
             "divergent_diagnoses": divergent,
         })
-        raw = await call_chat(
-            settings.OLLAMA_BASE_URL,
-            "deepseek-r1:32b",
-            [
-                {"role": "system", "content": _SYNTHESIS_SYSTEM},
-                {"role": "user", "content": synthesis_user},
-            ],
-            response_format={"type": "json_object"},
-            mock_domain="orchestrator",
-        )
+        raw = ""
         try:
+            raw = await call_chat(
+                settings.OLLAMA_BASE_URL,
+                "deepseek-r1:32b",
+                [
+                    {"role": "system", "content": _SYNTHESIS_SYSTEM},
+                    {"role": "user", "content": synthesis_user},
+                ],
+                response_format={"type": "json_object"},
+                mock_domain="orchestrator",
+            )
             payload = json.loads(raw)
             top_diagnoses = [DiagnosisCandidate(**d) for d in payload.get("top_diagnoses", [])]
         except (json.JSONDecodeError, ValidationError) as exc:
@@ -158,6 +159,12 @@ class Orchestrator:
                 "orchestrator.synthesis.parse_error",
                 error=str(exc),
                 raw=raw,
+            )
+            top_diagnoses = []
+        except Exception as exc:
+            log.error(
+                "orchestrator.synthesis.call_error",
+                error=str(exc),
             )
             top_diagnoses = []
         log.info("orchestrator.synthesis.done", top_diagnoses_count=len(top_diagnoses))
