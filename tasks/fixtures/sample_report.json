@@ -1,0 +1,25 @@
+{
+  "case_id": "00000000-0000-0000-0000-000000000001",
+  "synthesized_at": "2026-03-28T12:00:00",
+  "top_diagnoses": [
+    {
+      "rank": 1,
+      "snomed_code": "422587007",
+      "display": "NSTEMI (stub fixture)",
+      "confidence": 0.72,
+      "supporting_evidence": [
+        {
+          "source": "PubMed:stub",
+          "excerpt": "Placeholder citation for dashboard mocks.",
+          "relevance_score": 0.5
+        }
+      ],
+      "next_steps": ["Obtain serial troponins"],
+      "flags": []
+    }
+  ],
+  "vetoed_recommendations": [],
+  "consensus_level": 0.0,
+  "divergent_agents": [],
+  "fhir_diagnostic_report_id": null
+}
