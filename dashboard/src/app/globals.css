@@ -2,16 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens — controlled exclusively via the .dark class on <html>.
+   DarkModeToggle reads system preference on mount and applies the class,
+   so @media (prefers-color-scheme) is intentionally omitted here. */
 :root {
   --background: #ffffff;
   --foreground: #0f172a;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #020617;
-    --foreground: #f1f5f9;
-  }
 }
 
 .dark {
