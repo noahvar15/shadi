@@ -15,11 +15,11 @@ A second inference server (Ollama) runs alongside vLLM. Both expose an OpenAI-co
 
 ## Model Assignments
 
-### Image Analysis Agent → `medgemma:27b` (Ollama)
+### Image Analysis Agent → `alibayram/medgemma:27b` (Ollama)
 
-**Rationale:** MedGemma 1.5 is Google's multimodal model purpose-built for medical imaging. It handles radiographs, ECGs, chest X-rays, and CT scout images attached to an encounter before the case reaches the specialist agents. No general-purpose vision model approaches its performance on clinical imaging tasks at this parameter count.
+**Rationale:** MedGemma 1.5 is Google's multimodal model purpose-built for medical imaging. It handles radiographs, ECGs, chest X-rays, and CT scout images attached to an encounter before the case reaches the specialist agents. No general-purpose vision model approaches its performance on clinical imaging tasks at this parameter count. The Ollama registry tag is `alibayram/medgemma:27b` (the bare `medgemma:27b` library tag does not exist in the Ollama registry).
 
-**Approximate VRAM:** ~16 GB (Q4\_K\_M)
+**Approximate VRAM:** ~17 GB (Q4\_K\_M)
 
 ---
 
@@ -70,7 +70,7 @@ A second inference server (Ollama) runs alongside vLLM. Both expose an OpenAI-co
 
 | Agent | Model | Inference server | Approx VRAM |
 |---|---|---|---|
-| Image analysis | `medgemma:27b` | Ollama | ~16 GB |
+| Image analysis | `alibayram/medgemma:27b` | Ollama | ~17 GB |
 | Specialists ×4 (base) | `meditron:70b` FP4 | vLLM | ~38 GB |
 | Specialist LoRA adapters ×4 | — | vLLM | ~8 GB |
 | Intake | `qwen2.5:7b` | Ollama | ~4.5 GB |
@@ -107,5 +107,5 @@ vLLM is kept for Meditron-70B exclusively because Ollama does not support LoRA h
 
 ## Unknowns
 
-- Whether `medgemma:27b` multimodal support is stable in the Ollama runtime at the time of deployment; fallback is direct HuggingFace `transformers` inference.
+- Whether `alibayram/medgemma:27b` multimodal support is stable in the Ollama runtime at the time of deployment; fallback is direct HuggingFace `transformers` inference.
 - Whether `deepseek-r1:32b` produces sufficiently deterministic structured output for the FHIR synthesis step, or whether output parsing guard-rails are needed.
