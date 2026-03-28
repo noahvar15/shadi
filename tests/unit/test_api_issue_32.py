@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
@@ -12,17 +11,7 @@ from uuid import UUID
 import pytest
 from starlette.testclient import TestClient
 
-
-def _reload_api_modules() -> None:
-    import api.config as api_config
-    import api.main as api_main
-    import api.routes.cases as api_cases
-    import api.routes.reports as api_reports
-
-    importlib.reload(api_config)
-    importlib.reload(api_cases)
-    importlib.reload(api_reports)
-    importlib.reload(api_main)
+from tests.conftest import reload_api_modules
 
 
 @contextmanager
@@ -53,7 +42,7 @@ def _patched_app(monkeypatch: pytest.MonkeyPatch, mock_conn: AsyncMock):
         patch("arq.create_pool", AsyncMock(return_value=mock_arq)),
         patch("api.db.close_pool", AsyncMock()),
     ):
-        _reload_api_modules()
+        reload_api_modules()
         import api.main as api_main
 
         with TestClient(api_main.app) as client:
@@ -108,7 +97,7 @@ def test_post_cases_invalid_bundle_422_without_stub(monkeypatch: pytest.MonkeyPa
         patch("arq.create_pool", AsyncMock(return_value=mock_arq)),
         patch("api.db.close_pool", AsyncMock()),
     ):
-        _reload_api_modules()
+        reload_api_modules()
         import api.config as api_config
         import api.main as api_main
 
@@ -161,7 +150,7 @@ def test_post_cases_accepts_valid_sample_bundle(monkeypatch: pytest.MonkeyPatch)
         patch("arq.create_pool", AsyncMock(return_value=mock_arq)),
         patch("api.db.close_pool", AsyncMock()),
     ):
-        _reload_api_modules()
+        reload_api_modules()
         import api.main as api_main
 
         with TestClient(api_main.app) as client:
