@@ -31,7 +31,17 @@ import pytest
 
 from agents.evidence.evidence_agent import EvidenceAgent
 from agents.intake.intake_agent import IntakeAgent
-from agents.schemas import CaseObject, DiagnosisCandidate, EvidenceResult, SpecialistResult
+from agents.safety.veto_agent import SafetyVetoAgent
+from agents.schemas import (
+    Allergy,
+    CaseObject,
+    DiagnosisCandidate,
+    DifferentialReport,
+    EvidenceResult,
+    SafetyResult,
+    SpecialistResult,
+    VetoDecision,
+)
 from agents.specialists.cardiology_agent import CardiologyAgent
 from agents.specialists.image_agent import ImageAnalysisAgent
 from agents.specialists.neurology_agent import NeurologyAgent
@@ -494,3 +504,154 @@ async def test_evidence_agent_multiple_specialist_results():
     )
     result = await EvidenceAgent().run(case, [_EVIDENCE_SPECIALIST_RESULT, neuro_result])
     assert len(result.grounded_diagnoses) == 2
+
+
+# ── SafetyVetoAgent ───────────────────────────────────────────────────────────
+
+
+def _make_report(*next_steps_lists: list[str]) -> "DifferentialReport":
+    """Build a minimal DifferentialReport with the given per-diagnosis next_steps."""
+    diagnoses = [
+        DiagnosisCandidate(rank=i + 1, display=f"Diagnosis {i + 1}", confidence=0.5, next_steps=steps)
+        for i, steps in enumerate(next_steps_lists)
+    ]
+    return DifferentialReport(case_id=MOCK_CASE.case_id, top_diagnoses=diagnoses)
+
+
+def test_safety_veto_describe():
+    d = SafetyVetoAgent().describe()
+    assert d["name"] == "safety-veto"
+    assert d["domain"] == "safety"
+    assert d["model"] == "phi4:14b"
+
+
+def test_safety_veto_uses_ollama():
+    assert SafetyVetoAgent.inference_url == settings.OLLAMA_BASE_URL
+
+
+async def test_safety_veto_mock_mode_no_crash():
+    """MOCK_LLM=True (default): run completes without touching Ollama."""
+    case = fresh_case()
+    report = _make_report(["Order ECG", "Check troponin"])
+    result = await SafetyVetoAgent().run(case, report)
+    assert isinstance(result, SafetyResult)
+    assert result.agent_name == "safety-veto"
+    assert result.case_id == case.case_id
+
+
+async def test_safety_veto_mock_mode_all_not_vetoed():
+    """In mock mode, all decisions are vetoed=False."""
+    case = fresh_case()
+    report = _make_report(["Order ECG", "Check troponin"])
+    result = await SafetyVetoAgent().run(case, report)
+    assert all(not d.vetoed for d in result.decisions)
+
+
+async def test_safety_veto_one_decision_per_next_step():
+    """One VetoDecision is returned per next_steps item across all diagnoses."""
+    case = fresh_case()
+    report = _make_report(["Step A", "Step B"], ["Step C"])
+
+    payload = json.dumps({
+        "decisions": [
+            {"recommendation": "Step A", "vetoed": False, "reason": None, "contraindication_codes": []},
+            {"recommendation": "Step B", "vetoed": False, "reason": None, "contraindication_codes": []},
+            {"recommendation": "Step C", "vetoed": False, "reason": None, "contraindication_codes": []},
+        ]
+    })
+    with patch("agents.safety.veto_agent.call_chat", AsyncMock(return_value=payload)):
+        with patch("agents.safety.veto_agent.settings") as mock_settings:
+            mock_settings.MOCK_LLM = False
+            mock_settings.OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
+            result = await SafetyVetoAgent().run(case, report)
+
+    assert len(result.decisions) == 3
+    assert result.decisions[0].recommendation == "Step A"
+    assert result.decisions[1].recommendation == "Step B"
+    assert result.decisions[2].recommendation == "Step C"
+
+
+async def test_safety_veto_penicillin_allergy_amoxicillin_vetoed():
+    """Amoxicillin recommendation is vetoed for a penicillin-allergic patient."""
+    case = fresh_case(
+        allergies=[Allergy(substance="Penicillin", rxnorm_code="7980", reaction="Anaphylaxis", severity="severe")],
+    )
+    report = _make_report(["Administer amoxicillin 500 mg PO TID"])
+
+    payload = json.dumps({
+        "decisions": [
+            {
+                "recommendation": "Administer amoxicillin 500 mg PO TID",
+                "vetoed": True,
+                "reason": "Amoxicillin is a penicillin-class antibiotic; contraindicated given documented severe penicillin allergy (anaphylaxis).",
+                "contraindication_codes": ["723"],
+            }
+        ]
+    })
+    with patch("agents.safety.veto_agent.call_chat", AsyncMock(return_value=payload)):
+        with patch("agents.safety.veto_agent.settings") as mock_settings:
+            mock_settings.MOCK_LLM = False
+            mock_settings.OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
+            result = await SafetyVetoAgent().run(case, report)
+
+    assert len(result.decisions) == 1
+    decision = result.decisions[0]
+    assert decision.vetoed is True
+    assert decision.reason is not None
+    assert "723" in decision.contraindication_codes
+    assert any(result.decisions[i].vetoed for i in range(len(result.decisions)))
+
+
+async def test_safety_veto_clean_report_all_not_vetoed():
+    """A report with no contraindications returns vetoed=False on all decisions."""
+    case = fresh_case()
+    report = _make_report(["Order chest X-ray", "Draw CBC with differential"])
+
+    payload = json.dumps({
+        "decisions": [
+            {"recommendation": "Order chest X-ray", "vetoed": False, "reason": None, "contraindication_codes": []},
+            {"recommendation": "Draw CBC with differential", "vetoed": False, "reason": None, "contraindication_codes": []},
+        ]
+    })
+    with patch("agents.safety.veto_agent.call_chat", AsyncMock(return_value=payload)):
+        with patch("agents.safety.veto_agent.settings") as mock_settings:
+            mock_settings.MOCK_LLM = False
+            mock_settings.OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
+            result = await SafetyVetoAgent().run(case, report)
+
+    assert not any(d.vetoed for d in result.decisions)
+
+
+async def test_safety_veto_parse_error_fallback():
+    """Malformed LLM response falls back to all vetoed=False, does not crash."""
+    case = fresh_case()
+    report = _make_report(["Order ECG"])
+
+    with patch("agents.safety.veto_agent.call_chat", AsyncMock(return_value="not valid json {")):
+        with patch("agents.safety.veto_agent.settings") as mock_settings:
+            mock_settings.MOCK_LLM = False
+            mock_settings.OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
+            result = await SafetyVetoAgent().run(case, report)
+
+    assert len(result.decisions) == 1
+    assert result.decisions[0].vetoed is False
+
+
+async def test_safety_veto_empty_report_returns_empty_decisions():
+    """A report with no diagnoses (no next_steps) returns an empty decisions list."""
+    case = fresh_case()
+    report = DifferentialReport(case_id=case.case_id, top_diagnoses=[])
+
+    with patch("agents.safety.veto_agent.settings") as mock_settings:
+        mock_settings.MOCK_LLM = False
+        mock_settings.OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
+        result = await SafetyVetoAgent().run(case, report)
+
+    assert result.decisions == []
+
+
+async def test_safety_veto_result_case_id_matches_input():
+    case = fresh_case()
+    report = _make_report(["Order ECG"])
+    result = await SafetyVetoAgent().run(case, report)
+    assert result.case_id == case.case_id
