@@ -21,6 +21,28 @@ import httpx
 
 from config import settings
 
+# Reused across live (non-mock) chat calls to avoid per-request TCP setup.
+_shared_http_client: httpx.AsyncClient | None = None
+
+
+async def _get_shared_http_client() -> httpx.AsyncClient:
+    global _shared_http_client
+    if _shared_http_client is None:
+        _shared_http_client = httpx.AsyncClient(
+            timeout=120.0,
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
+        )
+    return _shared_http_client
+
+
+async def aclose_shared_llm_http_client() -> None:
+    """Close the shared HTTP client (optional — e.g. tests or graceful shutdown)."""
+    global _shared_http_client
+    if _shared_http_client is not None:
+        await _shared_http_client.aclose()
+        _shared_http_client = None
+
+
 # ── Mock fixtures ─────────────────────────────────────────────────────────────
 # Keyed by the ``mock_domain`` hint passed by each agent. These are minimal
 # but structurally valid responses so downstream parsing succeeds.
@@ -148,6 +170,53 @@ _MOCK_RESPONSES: dict[str, str] = {
             "reasoning_trace": "Mock toxicology reasoning — no real model was called.",
         }
     ),
+    # Claim evaluation response used by EvidenceAgent when calling meditron:70b.
+    # In practice MOCK_LLM short-circuits before claim eval is ever reached, but
+    # the entry is here so tests can patch call_chat and get a deterministic reply.
+    "evidence": json.dumps(
+        {
+            "verdict": "SUPPORTS",
+            "explanation": "Mock claim evaluation — no real model was called.",
+        }
+    ),
+    # Safety veto response used by SafetyVetoAgent when calling phi4:14b.
+    # In practice MOCK_LLM short-circuits before call_chat is reached, but
+    # the entry is here so tests can patch call_chat and get a deterministic reply.
+    "safety": json.dumps(
+        {
+            "decisions": [
+                {
+                    "recommendation": "Mock recommendation",
+                    "vetoed": False,
+                    "reason": None,
+                    "contraindication_codes": [],
+                }
+            ]
+        }
+    ),
+    # Synthesis response used by the Orchestrator when calling deepseek-r1:32b.
+    "orchestrator": json.dumps(
+        {
+            "top_diagnoses": [
+                {
+                    "rank": 1,
+                    "display": "Acute myocardial infarction (mock)",
+                    "confidence": 0.65,
+                    "snomed_code": "57054005",
+                    "next_steps": ["12-lead ECG", "Troponin I/T", "Cardiology consult"],
+                    "flags": ["MOCK"],
+                },
+                {
+                    "rank": 2,
+                    "display": "Pulmonary embolism (mock)",
+                    "confidence": 0.20,
+                    "snomed_code": "59282003",
+                    "next_steps": ["D-dimer", "CT pulmonary angiography"],
+                    "flags": ["MOCK"],
+                },
+            ]
+        }
+    ),
 }
 
 _MOCK_FALLBACK = json.dumps(
@@ -192,8 +261,8 @@ async def call_chat(
     if response_format is not None:
         payload["response_format"] = response_format
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(f"{base_url}/chat/completions", json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        return str(data["choices"][0]["message"]["content"])
+    client = await _get_shared_http_client()
+    resp = await client.post(f"{base_url}/chat/completions", json=payload)
+    resp.raise_for_status()
+    data = resp.json()
+    return str(data["choices"][0]["message"]["content"])
