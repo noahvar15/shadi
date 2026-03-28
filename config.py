@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
     VLLM_BASE_URL: str = "http://localhost:8080/v1"
 
+    # ── Database ───────────────────────────────────────────────────────────
+    # SQLAlchemy-style DSN (used by SQLAlchemy ORM and the API layer).
+    # EvidenceAgent strips the "+asyncpg" dialect prefix when opening a raw
+    # asyncpg connection for the pgvector similarity query.
+    DATABASE_URL: str = "postgresql+asyncpg://shadi:shadi@localhost:5432/shadi"
+
     # ── Local-dev mock flag ────────────────────────────────────────────────
     # Default True so the agents run without downloaded models.
     # Set MOCK_LLM=false in .env (or the environment) on the DGX.
