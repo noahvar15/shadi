@@ -10,8 +10,10 @@ expects a response with three top-level keys:
     observations : list of LOINC-coded observations
     medications  : list of RxNorm-coded medications
 
-The parsed values are written back onto the ``CaseObject`` so downstream
-specialist agents receive a fully-enriched case.
+Structured values are returned from :meth:`reason` in ``SpecialistResult.metadata``
+under :data:`INTAKE_CODES_METADATA_KEY`, then merged onto the live ``CaseObject``
+in :meth:`post_reason` so :meth:`reason` does not mutate shared state (see
+:class:`~agents.base.BaseAgent`).
 """
 
 from __future__ import annotations
@@ -28,6 +30,9 @@ from agents.schemas import (
     SpecialistResult,
 )
 from config import settings
+
+# Metadata key for structured codes produced by :meth:`IntakeAgent.reason`.
+INTAKE_CODES_METADATA_KEY = "intake_codes"
 
 _SYSTEM_PROMPT = """\
 You are a clinical informatics assistant. Your task is to extract structured
@@ -46,6 +51,16 @@ Return ONLY valid JSON with exactly three keys:
 If a category has no findings, return an empty array for that key.
 Do not include any explanation outside the JSON object.
 """
+
+
+def merge_intake_codes_into_case(case: CaseObject, result: SpecialistResult) -> None:
+    """Apply intake structured codes from ``result`` onto ``case`` (orchestrator helper)."""
+    block = result.metadata.get(INTAKE_CODES_METADATA_KEY)
+    if not isinstance(block, dict):
+        return
+    case.conditions = [ClinicalCode(**x) for x in block.get("conditions", [])]
+    case.observations = [Observation(**x) for x in block.get("observations", [])]
+    case.medications = [Medication(**x) for x in block.get("medications", [])]
 
 
 class IntakeAgent(BaseAgent[SpecialistResult]):
@@ -78,18 +93,22 @@ class IntakeAgent(BaseAgent[SpecialistResult]):
 
         payload: dict = json.loads(raw)
 
-        case.conditions = [
-            ClinicalCode(**item) for item in payload.get("conditions", [])
-        ]
-        case.observations = [
-            Observation(**item) for item in payload.get("observations", [])
-        ]
-        case.medications = [
-            Medication(**item) for item in payload.get("medications", [])
-        ]
+        conditions = [ClinicalCode(**item) for item in payload.get("conditions", [])]
+        observations = [Observation(**item) for item in payload.get("observations", [])]
+        medications = [Medication(**item) for item in payload.get("medications", [])]
 
         return SpecialistResult(
             agent_name=self.name,
             case_id=case.case_id,
             domain=self.domain,
+            metadata={
+                INTAKE_CODES_METADATA_KEY: {
+                    "conditions": [c.model_dump(mode="json") for c in conditions],
+                    "observations": [o.model_dump(mode="json") for o in observations],
+                    "medications": [m.model_dump(mode="json") for m in medications],
+                }
+            },
         )
+
+    def post_reason(self, case: CaseObject, result: SpecialistResult) -> None:
+        merge_intake_codes_into_case(case, result)

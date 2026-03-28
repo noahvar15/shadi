@@ -21,6 +21,28 @@ import httpx
 
 from config import settings
 
+# Reused across live (non-mock) chat calls to avoid per-request TCP setup.
+_shared_http_client: httpx.AsyncClient | None = None
+
+
+async def _get_shared_http_client() -> httpx.AsyncClient:
+    global _shared_http_client
+    if _shared_http_client is None:
+        _shared_http_client = httpx.AsyncClient(
+            timeout=120.0,
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
+        )
+    return _shared_http_client
+
+
+async def aclose_shared_llm_http_client() -> None:
+    """Close the shared HTTP client (optional — e.g. tests or graceful shutdown)."""
+    global _shared_http_client
+    if _shared_http_client is not None:
+        await _shared_http_client.aclose()
+        _shared_http_client = None
+
+
 # ── Mock fixtures ─────────────────────────────────────────────────────────────
 # Keyed by the ``mock_domain`` hint passed by each agent. These are minimal
 # but structurally valid responses so downstream parsing succeeds.
@@ -201,8 +223,8 @@ async def call_chat(
     if response_format is not None:
         payload["response_format"] = response_format
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(f"{base_url}/chat/completions", json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        return str(data["choices"][0]["message"]["content"])
+    client = await _get_shared_http_client()
+    resp = await client.post(f"{base_url}/chat/completions", json=payload)
+    resp.raise_for_status()
+    data = resp.json()
+    return str(data["choices"][0]["message"]["content"])

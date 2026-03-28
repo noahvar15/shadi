@@ -5,6 +5,8 @@ config.py). No models need to be downloaded; no inference servers need to be
 running.
 
 Coverage:
+  - Async tests use ``@pytest.mark.asyncio`` explicitly (in addition to
+    ``asyncio_mode = auto`` in ``pyproject.toml``).
   - BaseAgent.describe() contract for all six agents
   - inference_url routing: Ollama for intake/image, vLLM for specialists
   - IntakeAgent.run() populates case.conditions / observations / medications
@@ -117,6 +119,7 @@ def test_ollama_agents_use_ollama():
 # ── IntakeAgent ───────────────────────────────────────────────────────────────
 
 
+@pytest.mark.asyncio
 async def test_intake_returns_specialist_result():
     result = await IntakeAgent().run(fresh_case())
     assert isinstance(result, SpecialistResult)
@@ -124,6 +127,7 @@ async def test_intake_returns_specialist_result():
     assert result.agent_name == "intake"
 
 
+@pytest.mark.asyncio
 async def test_intake_populates_conditions():
     case = fresh_case()
     await IntakeAgent().run(case)
@@ -134,6 +138,7 @@ async def test_intake_populates_conditions():
         assert c.display
 
 
+@pytest.mark.asyncio
 async def test_intake_populates_observations():
     case = fresh_case()
     await IntakeAgent().run(case)
@@ -143,6 +148,7 @@ async def test_intake_populates_observations():
         assert o.display
 
 
+@pytest.mark.asyncio
 async def test_intake_populates_medications():
     case = fresh_case()
     await IntakeAgent().run(case)
@@ -152,6 +158,7 @@ async def test_intake_populates_medications():
         assert m.name
 
 
+@pytest.mark.asyncio
 async def test_intake_custom_mock_empty_payload():
     empty = json.dumps({"conditions": [], "observations": [], "medications": []})
     with patch("agents.intake.intake_agent.call_chat", AsyncMock(return_value=empty)):
@@ -163,6 +170,7 @@ async def test_intake_custom_mock_empty_payload():
         assert case.medications == []
 
 
+@pytest.mark.asyncio
 async def test_intake_custom_mock_missing_keys():
     """Partial JSON (missing observations/medications) should not raise."""
     partial = json.dumps(
@@ -183,6 +191,7 @@ async def test_intake_custom_mock_missing_keys():
 # ── ImageAnalysisAgent ────────────────────────────────────────────────────────
 
 
+@pytest.mark.asyncio
 async def test_image_agent_no_attachments_returns_empty():
     case = fresh_case()
     assert case.imaging_attachments == []
@@ -192,6 +201,7 @@ async def test_image_agent_no_attachments_returns_empty():
     assert result.diagnoses == []
 
 
+@pytest.mark.asyncio
 async def test_image_agent_with_attachments_returns_diagnoses():
     case = fresh_case(imaging_attachments=["https://example.com/cxr.jpg"])
     result = await ImageAnalysisAgent().run(case)
@@ -199,6 +209,7 @@ async def test_image_agent_with_attachments_returns_diagnoses():
     assert len(result.diagnoses) > 0
 
 
+@pytest.mark.asyncio
 async def test_image_agent_early_exit_skips_llm():
     """Confirm the LLM is never called when there are no attachments."""
     with patch("agents.specialists.image_agent.call_chat", AsyncMock()) as mock_llm:
@@ -218,6 +229,7 @@ async def test_image_agent_early_exit_skips_llm():
         (ToxicologyAgent, "toxicology"),
     ],
 )
+@pytest.mark.asyncio
 async def test_specialist_returns_correct_domain(AgentClass, expected_domain):
     result = await AgentClass().run(fresh_case())
     assert isinstance(result, SpecialistResult)
@@ -229,6 +241,7 @@ async def test_specialist_returns_correct_domain(AgentClass, expected_domain):
     "AgentClass",
     [CardiologyAgent, NeurologyAgent, PulmonologyAgent, ToxicologyAgent],
 )
+@pytest.mark.asyncio
 async def test_specialist_confidence_sums_le_1(AgentClass):
     result = await AgentClass().run(fresh_case())
     total = sum(d.confidence for d in result.diagnoses)
@@ -241,6 +254,7 @@ async def test_specialist_confidence_sums_le_1(AgentClass):
     "AgentClass",
     [CardiologyAgent, NeurologyAgent, PulmonologyAgent, ToxicologyAgent],
 )
+@pytest.mark.asyncio
 async def test_specialist_diagnoses_ranked(AgentClass):
     result = await AgentClass().run(fresh_case())
     ranks = [d.rank for d in result.diagnoses]
@@ -251,6 +265,7 @@ async def test_specialist_diagnoses_ranked(AgentClass):
     "AgentClass",
     [CardiologyAgent, NeurologyAgent, PulmonologyAgent, ToxicologyAgent],
 )
+@pytest.mark.asyncio
 async def test_specialist_has_reasoning_trace(AgentClass):
     result = await AgentClass().run(fresh_case())
     assert isinstance(result.reasoning_trace, str)
@@ -261,6 +276,7 @@ async def test_specialist_has_reasoning_trace(AgentClass):
     "AgentClass",
     [CardiologyAgent, NeurologyAgent, PulmonologyAgent, ToxicologyAgent],
 )
+@pytest.mark.asyncio
 async def test_specialist_custom_mock(AgentClass):
     """Custom payload: verify parsing still works with user-supplied JSON."""
     custom = json.dumps(
@@ -289,6 +305,7 @@ async def test_specialist_custom_mock(AgentClass):
 # ── case_id propagation ───────────────────────────────────────────────────────
 
 
+@pytest.mark.asyncio
 async def test_result_case_id_matches_input():
     case = fresh_case()
     for AgentClass in [
@@ -340,6 +357,7 @@ def test_evidence_agent_uses_ollama():
     assert EvidenceAgent.inference_url == settings.OLLAMA_BASE_URL
 
 
+@pytest.mark.asyncio
 async def test_evidence_agent_mock_mode_no_crash():
     """MOCK_LLM=True (default): run completes without touching DB or Ollama."""
     case = fresh_case()
@@ -349,6 +367,7 @@ async def test_evidence_agent_mock_mode_no_crash():
     assert result.case_id == case.case_id
 
 
+@pytest.mark.asyncio
 async def test_evidence_agent_mock_mode_returns_diagnoses_unchanged():
     """In mock mode, grounded_diagnoses contains the input candidates unmodified."""
     case = fresh_case()
@@ -358,6 +377,7 @@ async def test_evidence_agent_mock_mode_returns_diagnoses_unchanged():
     assert result.grounded_diagnoses[0].supporting_evidence == []
 
 
+@pytest.mark.asyncio
 async def test_evidence_agent_mock_mode_skips_embed():
     """Confirm the Ollama /api/embeddings endpoint is never called in mock mode."""
     case = fresh_case()
@@ -393,6 +413,7 @@ def _make_real_mode_patches(mock_conn: MagicMock, mock_http_resp_embedding: list
     return mock_http
 
 
+@pytest.mark.asyncio
 async def test_evidence_agent_empty_pgvector_no_crash():
     """Real-mode: empty pgvector table → no citations, no exception."""
     case = fresh_case()
@@ -417,6 +438,7 @@ async def test_evidence_agent_empty_pgvector_no_crash():
     assert result.grounded_diagnoses[0].supporting_evidence == []
 
 
+@pytest.mark.asyncio
 async def test_evidence_agent_supports_attaches_citation():
     """Real-mode: SUPPORTS verdict → EvidenceCitation is appended."""
     case = fresh_case()
@@ -447,6 +469,7 @@ async def test_evidence_agent_supports_attaches_citation():
     assert citations[0].excerpt == "AMI is the leading cause..."
 
 
+@pytest.mark.asyncio
 async def test_evidence_agent_refutes_no_citation():
     """Real-mode: REFUTES verdict → no EvidenceCitation is attached."""
     case = fresh_case()
@@ -474,12 +497,14 @@ async def test_evidence_agent_refutes_no_citation():
     assert result.grounded_diagnoses[0].supporting_evidence == []
 
 
+@pytest.mark.asyncio
 async def test_evidence_agent_result_case_id_matches_input():
     case = fresh_case()
     result = await EvidenceAgent().run(case, [_EVIDENCE_SPECIALIST_RESULT])
     assert result.case_id == case.case_id
 
 
+@pytest.mark.asyncio
 async def test_evidence_agent_multiple_specialist_results():
     """All diagnoses from multiple specialist results are collected."""
     case = fresh_case()
