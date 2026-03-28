@@ -3,17 +3,20 @@
 Converts raw FHIR resources (Patient, Observation, Condition,
 MedicationRequest, AllergyIntolerance) into the internal CaseObject schema.
 
-Incoming bundles are expected as **FHIR R4** JSON (Epic/Cerner). The
-``fhir.resources`` models used in ``normalize_*`` helpers target a newer FHIR
-version; :meth:`bundle_to_case` therefore parses R4 dict shapes directly so
-EHR payloads validate reliably.
+Incoming bundles are expected as **FHIR R4** JSON (Epic/Cerner). Private helpers
+(``_clinical_code_from_codeable_*``, ``_build_observation``, etc.) implement
+the mapping once; :meth:`FHIRNormalizer.normalize_*` delegates to those same
+helpers so dict-based :meth:`bundle_to_case` and programmatic ``fhir.resources``
+call sites cannot drift. The ``fhir.resources`` types may target a newer FHIR
+version than R4 JSON from the EHR — R4 dict parsing remains the source path
+for bundles.
 """
 
 from __future__ import annotations
 
 import re
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from fhir.resources.allergyintolerance import AllergyIntolerance
@@ -122,18 +125,53 @@ def _condition_display_r4(cond: dict[str, Any]) -> str:
     return ""
 
 
-def _clinical_code_from_condition_dict(res: dict[str, Any]) -> ClinicalCode | None:
-    code = res.get("code")
+def _clinical_code_from_codeable_dict(code: dict[str, Any] | None) -> ClinicalCode | None:
     if not isinstance(code, dict):
         return None
     codings = code.get("coding") or []
     if not codings or not isinstance(codings[0], dict):
         return None
-    c = codings[0]
+    c = cast(dict[str, Any], codings[0])
+    text = str(code.get("text") or "")
     return ClinicalCode(
         system=str(c.get("system") or ""),
         code=str(c.get("code") or ""),
-        display=str(c.get("display") or code.get("text") or ""),
+        display=str(c.get("display") or text or ""),
+    )
+
+
+def _clinical_code_from_codeable_concept(concept: Any) -> ClinicalCode | None:
+    """Map a FHIR CodeableConcept model to :class:`ClinicalCode`."""
+    if concept is None:
+        return None
+    codings = getattr(concept, "coding", None) or []
+    if not codings:
+        return None
+    c0 = codings[0]
+    text = getattr(concept, "text", None) or ""
+    return ClinicalCode(
+        system=c0.system or "",
+        code=c0.code or "",
+        display=c0.display or text or "",
+    )
+
+
+def _clinical_code_from_condition_dict(res: dict[str, Any]) -> ClinicalCode | None:
+    code = res.get("code")
+    return _clinical_code_from_codeable_dict(code if isinstance(code, dict) else None)
+
+
+def _build_observation(
+    loinc_code: str,
+    display: str,
+    value: str | float | None,
+    unit: str | None,
+) -> Observation:
+    return Observation(
+        loinc_code=loinc_code,
+        display=display,
+        value=value,
+        unit=unit,
     )
 
 
@@ -144,7 +182,7 @@ def _observation_from_dict_r4(res: dict[str, Any]) -> Observation | None:
     codings = code.get("coding") or []
     if not codings or not isinstance(codings[0], dict):
         return None
-    c = codings[0]
+    c = cast(dict[str, Any], codings[0])
     value: str | float | None = None
     unit: str | None = None
     vq = res.get("valueQuantity")
@@ -153,12 +191,16 @@ def _observation_from_dict_r4(res: dict[str, Any]) -> Observation | None:
         unit = vq.get("unit")
     elif res.get("valueString") is not None:
         value = res.get("valueString")
-    return Observation(
-        loinc_code=str(c.get("code") or ""),
-        display=str(c.get("display") or ""),
-        value=value,
-        unit=unit,
+    return _build_observation(
+        str(c.get("code") or ""),
+        str(c.get("display") or ""),
+        value,
+        unit,
     )
+
+
+def _medication_from_rxnorm_and_name(rxnorm: str, name: str) -> Medication:
+    return Medication(rxnorm_code=rxnorm or "", name=name)
 
 
 def _medication_from_dict_r4(res: dict[str, Any]) -> Medication | None:
@@ -172,7 +214,36 @@ def _medication_from_dict_r4(res: dict[str, Any]) -> Medication | None:
             rxnorm = str(c.get("code") or "")
             break
     name = str(mc.get("text") or "")
-    return Medication(rxnorm_code=rxnorm or "", name=name)
+    return _medication_from_rxnorm_and_name(rxnorm, name)
+
+
+def _manifestation_text_r4(m0: dict[str, Any]) -> str | None:
+    """R4: manifestation is CodeableConcept — prefer ``text``, then ``coding[0].display``."""
+    if m0.get("text"):
+        return str(m0["text"])
+    codings = m0.get("coding") or []
+    if codings and isinstance(codings[0], dict):
+        c0 = cast(dict[str, Any], codings[0])
+        disp = c0.get("display")
+        if disp:
+            return str(disp)
+        if c0.get("code"):
+            return str(c0["code"])
+    return None
+
+
+def _build_allergy(
+    substance: str,
+    rxnorm: str | None,
+    reaction: str | None,
+    severity: str | None,
+) -> Allergy:
+    return Allergy(
+        substance=substance,
+        rxnorm_code=rxnorm,
+        reaction=reaction,
+        severity=severity,
+    )
 
 
 def _allergy_from_dict_r4(res: dict[str, Any]) -> Allergy | None:
@@ -190,33 +261,20 @@ def _allergy_from_dict_r4(res: dict[str, Any]) -> Allergy | None:
     severity: str | None = None
     reacts = res.get("reaction") or []
     if reacts and isinstance(reacts[0], dict):
-        r0 = reacts[0]
+        r0 = cast(dict[str, Any], reacts[0])
         if r0.get("severity"):
             severity = str(r0["severity"])
         mans = r0.get("manifestation") or []
         if mans and isinstance(mans[0], dict):
-            m0 = mans[0]
-            reaction = str(m0.get("text") or m0.get("display") or "")
-    return Allergy(
-        substance=substance,
-        rxnorm_code=rxnorm,
-        reaction=reaction,
-        severity=severity,
-    )
+            reaction = _manifestation_text_r4(cast(dict[str, Any], mans[0]))
+    return _build_allergy(substance, rxnorm, reaction, severity)
 
 
 class FHIRNormalizer:
     """Converts FHIR resource bundles into CaseObject instances."""
 
     def normalize_condition(self, resource: Condition) -> ClinicalCode | None:
-        if not resource.code or not resource.code.coding:
-            return None
-        coding = resource.code.coding[0]
-        return ClinicalCode(
-            system=coding.system or "",
-            code=coding.code or "",
-            display=coding.display or resource.code.text or "",
-        )
+        return _clinical_code_from_codeable_concept(resource.code)
 
     def normalize_observation(self, resource: FHIRObservation) -> Observation | None:
         if not resource.code or not resource.code.coding:
@@ -229,11 +287,11 @@ class FHIRNormalizer:
             unit = resource.valueQuantity.unit
         elif resource.valueString:
             value = resource.valueString
-        return Observation(
-            loinc_code=coding.code or "",
-            display=coding.display or "",
-            value=value,
-            unit=unit,
+        return _build_observation(
+            coding.code or "",
+            coding.display or "",
+            value,
+            unit,
         )
 
     def normalize_medication(self, resource: MedicationRequest) -> Medication | None:
@@ -242,7 +300,7 @@ class FHIRNormalizer:
         codings = resource.medicationCodeableConcept.coding or []
         rxnorm = next((c.code for c in codings if "rxnorm" in (c.system or "").lower()), "")
         name = resource.medicationCodeableConcept.text or ""
-        return Medication(rxnorm_code=rxnorm or "", name=name)
+        return _medication_from_rxnorm_and_name(rxnorm or "", name or "")
 
     def normalize_allergy(self, resource: AllergyIntolerance) -> Allergy | None:
         if not resource.code:
@@ -255,15 +313,15 @@ class FHIRNormalizer:
         if resource.reaction:
             r = resource.reaction[0]
             if r.manifestation:
-                reaction = r.manifestation[0].text
+                m0 = r.manifestation[0]
+                md = m0.model_dump(mode="json", exclude_none=True)
+                if isinstance(md, dict):
+                    reaction = _manifestation_text_r4(md)
+                if reaction is None and m0.text:
+                    reaction = m0.text
             if r.severity:
                 severity = r.severity
-        return Allergy(
-            substance=substance,
-            rxnorm_code=rxnorm,
-            reaction=reaction,
-            severity=severity,
-        )
+        return _build_allergy(substance, rxnorm, reaction, severity)
 
     def bundle_to_case(self, bundle_json: dict[str, Any]) -> CaseObject:
         """Parse a FHIR R4 ``Bundle`` (dict) into a :class:`CaseObject`."""
