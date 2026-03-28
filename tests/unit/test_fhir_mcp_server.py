@@ -1,7 +1,9 @@
-"""Tests for FHIR MCP server OAuth (issue #26)."""
+"""Tests for FHIR MCP server: OAuth (#26), Subscription + notify (#27), stop (#29)."""
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -9,6 +11,12 @@ import pytest
 
 from shadi_fhir.exceptions import FHIRAuthError
 from shadi_fhir.mcp_server import FHIRMCPServer
+
+_FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "sample_bundle.json"
+
+
+def _load_bundle() -> dict:
+    return json.loads(_FIXTURE.read_text(encoding="utf-8"))
 
 
 def _http_response(
@@ -30,6 +38,9 @@ def _make_server() -> FHIRMCPServer:
         "client-id",
         "secret",
         "https://auth.example.org/oauth2/token",
+        notification_endpoint="https://shadi.local/fhir/notify",
+        redis_url="redis://localhost:6379/0",
+        intake_queue="shadi:test",
     )
 
 
@@ -61,3 +72,92 @@ async def test_get_token_cached_within_ttl() -> None:
     t2 = await server._get_token()
     assert t1 == t2 == "tok1"
     assert mock_http.post.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_start_registers_subscription() -> None:
+    server = _make_server()
+    token_url = server._token_url
+    base = server._base_url
+
+    async def post_side_effect(url: str, **kwargs: object) -> httpx.Response:
+        u = str(url)
+        if u == token_url:
+            return _http_response(
+                200,
+                json_data={"access_token": "t", "expires_in": 3600},
+                url=u,
+            )
+        if u.endswith("/Subscription") or u == "/Subscription":
+            return _http_response(
+                201,
+                json_data={"resourceType": "Subscription", "id": "sub-99"},
+                url=f"{base}/Subscription",
+            )
+        raise AssertionError(f"unexpected POST {u!r}")
+
+    async def delete_side_effect(url: str, **kwargs: object) -> httpx.Response:
+        assert "sub-99" in str(url)
+        return _http_response(204, method="DELETE", url=str(url))
+
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(side_effect=post_side_effect)
+    mock_http.delete = AsyncMock(side_effect=delete_side_effect)
+    mock_http.aclose = AsyncMock()
+
+    mock_arq = AsyncMock()
+    mock_arq.enqueue_job = AsyncMock()
+    mock_arq.close = AsyncMock()
+
+    with patch("shadi_fhir.mcp_server.httpx.AsyncClient", return_value=mock_http):
+        with patch(
+            "shadi_fhir.mcp_server.create_intake_pool",
+            AsyncMock(return_value=mock_arq),
+        ):
+            await server.start()
+
+    assert server._subscription_id == "sub-99"
+    await server.stop()
+    mock_http.delete.assert_awaited()
+    mock_arq.close.assert_awaited()
+    mock_http.aclose.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stop_swallows_404_on_delete() -> None:
+    server = _make_server()
+    server._subscription_id = "gone"
+    server._access_token = "t"
+    server._token_deadline_monotonic = 1e12
+
+    mock_http = AsyncMock()
+    mock_http.delete = AsyncMock(
+        return_value=_http_response(
+            404,
+            method="DELETE",
+            url="https://fhir.example.org/R4/Subscription/gone",
+        )
+    )
+    mock_http.aclose = AsyncMock()
+    server._http = mock_http
+    server._arq = None
+
+    await server.stop()
+    mock_http.delete.assert_awaited()
+    mock_http.aclose.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handle_notification_enqueues_when_arq_ready() -> None:
+    server = _make_server()
+    mock_arq = AsyncMock()
+    mock_arq.enqueue_job = AsyncMock()
+    server._arq = mock_arq
+    server._http = AsyncMock()
+
+    case = await server.handle_notification(_load_bundle())
+    assert case.patient_id == "pat-sample-1"
+    mock_arq.enqueue_job.assert_awaited_once()
+    args, _kwargs = mock_arq.enqueue_job.call_args
+    assert args[0] == "run_intake"
+    assert args[1]["patient_id"] == "pat-sample-1"
