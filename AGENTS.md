@@ -34,7 +34,7 @@ agents/
   evidence/          # PubMed + guidelines cross-reference
   safety/            # Safety veto (contraindications, allergies, meds)
   orchestrator/      # Fan-out, A2A debate, consensus synthesis
-fhir/                # FHIR R4 MCP server + resource normalizer
+shadi_fhir/          # FHIR R4 normalizer (`fhir.resources` is the HL7 lib — avoid a top-level `fhir` pkg)
 a2a/                 # A2A protocol schema + ENDORSE/CHALLENGE/MODIFY logic
 models/              # vLLM engine wrapper + LoRA adapter management
 api/                 # FastAPI app (routes, schemas, middleware)
@@ -111,7 +111,7 @@ For skill discovery and installation, use the Vercel `find-skills` workflow capt
 | `find-skills` | Discovering and installing shared skills from the Vercel skills ecosystem |
 | `writing-plans` | Multi-step tasks or features with a spec/requirements |
 | `git-advanced-workflows` | Complex rebases, bisect, recovering commits |
-| `mcp-builder` | Changes to the FHIR MCP server in `fhir/` |
+| `mcp-builder` | Changes to the FHIR MCP server in `shadi_fhir/` |
 | `python-performance-optimization` | Slow inference, memory pressure, profiling |
 | `receiving-code-review` | When acting on code review feedback |
 | `requesting-code-review` | After completing a feature or before merging |
