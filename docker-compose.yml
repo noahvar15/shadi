@@ -91,6 +91,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://shadi:shadi@postgres:5432/shadi
       - REDIS_URL=redis://redis:6379/0
+      - API_SECRET_KEY=${API_SECRET_KEY:-dev-local-only-set-a-long-random-secret}
       - VLLM_BASE_URL=http://vllm:8080/v1
       - OLLAMA_BASE_URL=http://ollama:11434/v1
       # Model assignments — see ADR-002
@@ -128,6 +129,7 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://shadi:shadi@postgres:5432/shadi
       - REDIS_URL=redis://redis:6379/0
+      - API_SECRET_KEY=${API_SECRET_KEY:-dev-local-only-set-a-long-random-secret}
       - INTAKE_QUEUE=${INTAKE_QUEUE:-arq:intake}
       - VLLM_BASE_URL=http://vllm:8080/v1
       - OLLAMA_BASE_URL=http://ollama:11434/v1
