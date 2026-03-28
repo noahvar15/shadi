@@ -23,7 +23,7 @@ class Settings(BaseSettings):
         validation_alias="OLLAMA_BASE_URL",
     )
     intake_queue: str = Field(default="arq:intake", validation_alias="INTAKE_QUEUE")
-    api_secret_key: str = Field(default="change-me", validation_alias="API_SECRET_KEY")
+    api_secret_key: str = Field(validation_alias="API_SECRET_KEY")
     # DEP-1 (cross-track-dependencies): use until Noah #28 contract is merged in your fork
     stub_case_intake: bool = Field(default=False, validation_alias="SHADI_STUB_CASE_INTAKE")
 

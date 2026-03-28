@@ -24,11 +24,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("shadi.startup")
     pool = await init_pool(settings.database_url)
     app.state.pool = pool
-    arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
-    app.state.arq_redis = arq_redis
-    yield
-    await arq_redis.close()
-    await close_pool(pool)
+    try:
+        arq_redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        app.state.arq_redis = arq_redis
+        try:
+            yield
+        finally:
+            await arq_redis.close()
+    finally:
+        await close_pool(pool)
     logger.info("shadi.shutdown")
 
 

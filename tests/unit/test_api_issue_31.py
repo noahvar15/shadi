@@ -14,6 +14,7 @@ from starlette.testclient import TestClient
 def _patched_lifespan(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@127.0.0.1:9/nope")
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:9/0")
+    monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-for-pytest")
 
     from api.config import get_settings
 
@@ -37,9 +38,11 @@ def _patched_lifespan(monkeypatch: pytest.MonkeyPatch):
         patch("api.db.close_pool", AsyncMock()),
     ):
         import api.config as api_config
+        import api.deps as api_deps
         import api.main as api_main
 
         importlib.reload(api_config)
+        importlib.reload(api_deps)
         importlib.reload(api_main)
         with TestClient(api_main.app) as client:
             yield client, mock_pool, mock_arq
@@ -48,6 +51,7 @@ def _patched_lifespan(monkeypatch: pytest.MonkeyPatch):
 def test_settings_reads_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://a:b@localhost:5432/x")
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-for-pytest")
     from api.config import Settings, get_settings
 
     get_settings.cache_clear()
@@ -91,6 +95,7 @@ async def test_asyncpg_dsn_strips_plus_asyncpg(monkeypatch: pytest.MonkeyPatch) 
     """init_pool uses DSN without +asyncpg for asyncpg driver."""
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@127.0.0.1:9/db")
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:9/0")
+    monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-for-pytest")
 
     from api.config import get_settings
 
