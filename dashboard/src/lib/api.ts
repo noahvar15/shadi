@@ -1,3 +1,7 @@
+// When NEXT_PUBLIC_API_URL is not set the client falls back to localhost:8000.
+// To enable offline/test mock mode, install MSW (`bun add msw`) and activate
+// the handlers in src/lib/mock/handlers.ts, then initialise the worker in
+// src/providers.tsx before the QueryClientProvider tree.
 import axios, { isAxiosError } from 'axios'
 
 export const api = axios.create({
