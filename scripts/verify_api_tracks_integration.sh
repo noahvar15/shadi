@@ -14,6 +14,10 @@ refs=(
   origin/issue/34-arq-worker-and-tests
 )
 for ref in "${refs[@]}"; do
+  if ! git rev-parse --verify -q "$ref" >/dev/null; then
+    echo "FAIL: ref $ref does not exist after fetch (remote branch deleted or typo)." >&2
+    exit 1
+  fi
   if git merge-base --is-ancestor "$ref" HEAD; then
     echo "OK: $ref is an ancestor of HEAD"
   else
