@@ -26,8 +26,10 @@ interface PatientEntry {
 
 const STATUS_DOT: Record<string, string> = {
   complete: 'bg-emerald-400',
-  running: 'bg-amber-400 animate-pulse',
+  processing: 'bg-amber-400 animate-pulse',
   queued: 'bg-slate-400',
+  pending_enqueue: 'bg-slate-400',
+  enqueue_failed: 'bg-red-400',
   failed: 'bg-red-400',
 }
 

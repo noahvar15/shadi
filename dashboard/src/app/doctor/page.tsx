@@ -8,14 +8,19 @@ import { api } from '@/lib/api'
 interface Case {
   case_id: string
   patient_id: string
-  status: 'complete' | 'running' | 'queued'
+  patient_name?: string
+  status: string
   created_at: string
+  chief_complaint?: string
 }
 
-const STATUS_STYLES: Record<Case['status'], string> = {
+const STATUS_STYLES: Record<string, string> = {
   complete: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-  running: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  processing: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   queued: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  pending_enqueue: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  enqueue_failed: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  failed: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 }
 
 function SkeletonCard() {
@@ -61,7 +66,7 @@ function CaseCard({ c }: { c: Case }) {
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
           <span
-            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${STATUS_STYLES[c.status]}`}
+            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${STATUS_STYLES[c.status] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}
           >
             {c.status}
           </span>
@@ -79,7 +84,7 @@ export default function DoctorPage() {
     queryKey: ['cases'],
     queryFn: () => api.get<Case[]>('/api/cases').then((r) => r.data),
     refetchInterval: (query) =>
-      query.state.data?.some((c) => c.status === 'queued' || c.status === 'running')
+      query.state.data?.some((c) => c.status !== 'complete' && c.status !== 'failed' && c.status !== 'enqueue_failed')
         ? 2000
         : false,
   })

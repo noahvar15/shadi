@@ -32,8 +32,10 @@ interface PatientResult {
 
 const STATUS_COLOR: Record<string, string> = {
   complete: 'text-emerald-500',
-  running: 'text-amber-500',
+  processing: 'text-amber-500',
   queued: 'text-slate-400',
+  pending_enqueue: 'text-slate-400',
+  enqueue_failed: 'text-red-500',
   failed: 'text-red-500',
 }
 

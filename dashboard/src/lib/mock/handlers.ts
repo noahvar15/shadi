@@ -17,7 +17,7 @@ interface MockCase {
   case_id: string
   patient_id: string
   patient_name: string
-  status: 'queued' | 'running' | 'complete'
+  status: 'queued' | 'processing' | 'complete'
   created_at: string
   chief_complaint: string
 }
@@ -43,7 +43,7 @@ const MOCK_CASES: MockCase[] = [
     case_id: 'CASE-DEMO-002',
     patient_id: 'PT-DEMO-002',
     patient_name: 'James Okafor',
-    status: 'running',
+    status: 'processing',
     created_at: new Date(Date.now() - 900_000).toISOString(),
     chief_complaint: [
       'Chief Complaint: Sudden severe headache',
@@ -163,6 +163,6 @@ export const handlers = [
   }),
 
   http.get('/api/reports/:caseId/status', ({ params }) => {
-    return HttpResponse.json({ case_id: params.caseId, status: 'running' })
+    return HttpResponse.json({ case_id: params.caseId, status: 'processing' })
   }),
 ]

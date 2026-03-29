@@ -12,14 +12,14 @@ import { DifferentialList } from '@/components/report/DifferentialList'
 import { CitationPanel } from '@/components/report/CitationPanel'
 
 function StatusText({ status }: { status: DifferentialReport['status'] | undefined }) {
-  if (!status || status === 'queued') {
+  if (!status || status === 'queued' || status === 'pending_enqueue') {
     return (
       <p className="text-sm text-slate-500 dark:text-slate-400">
         {status ? 'Queued — waiting for pipeline slot\u2026' : 'Loading\u2026'}
       </p>
     )
   }
-  if (status === 'running') {
+  if (status === 'processing') {
     return (
       <p className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -76,7 +76,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
   })
 
   const isInProgress =
-    isLoading || !report || report.status === 'queued' || report.status === 'running'
+    isLoading || !report || (report.status !== 'complete' && report.status !== 'failed')
 
   if (error) {
     return (
