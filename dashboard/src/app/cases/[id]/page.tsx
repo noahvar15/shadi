@@ -109,13 +109,40 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
             <ChevronLeft size={14} /> Cases
           </Link>
         </div>
-        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md p-5">
+        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md p-5 space-y-3">
           <p className="text-red-700 dark:text-red-300 font-medium text-sm">
             Diagnostic pipeline failed
           </p>
-          <p className="text-red-600 dark:text-red-400 text-sm mt-1">
-            The agent pipeline encountered an error processing this case. Please try resubmitting.
+          <p className="text-red-600 dark:text-red-400 text-sm">
+            The agent pipeline encountered an error processing this case.
+            {report.pipeline_step && (
+              <> Failed during the <span className="font-semibold">{report.pipeline_step}</span> stage.</>
+            )}
           </p>
+          {report.error_message && (
+            <details className="text-xs">
+              <summary className="text-red-600 dark:text-red-400 cursor-pointer hover:underline font-medium">
+                Show error details
+              </summary>
+              <pre className="mt-2 p-3 bg-red-100 dark:bg-red-900/40 rounded text-red-800 dark:text-red-300 whitespace-pre-wrap overflow-x-auto font-mono max-h-48 overflow-y-auto">
+                {report.error_message}
+              </pre>
+            </details>
+          )}
+          <div className="flex gap-3 pt-1">
+            <Link
+              href="/nurse"
+              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              Resubmit Case
+            </Link>
+            <Link
+              href="/doctor"
+              className="px-4 py-2 border border-[var(--border)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] text-sm font-medium rounded-lg transition-colors"
+            >
+              Back to Cases
+            </Link>
+          </div>
         </div>
       </div>
     )
