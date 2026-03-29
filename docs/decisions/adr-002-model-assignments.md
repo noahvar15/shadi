@@ -109,3 +109,9 @@ vLLM is kept for Meditron-70B exclusively because Ollama does not support LoRA h
 
 - Whether `alibayram/medgemma:27b` multimodal support is stable in the Ollama runtime at the time of deployment; fallback is direct HuggingFace `transformers` inference.
 - Whether `deepseek-r1:32b` produces sufficiently deterministic structured output for the FHIR synthesis step, or whether output parsing guard-rails are needed.
+
+---
+
+## Amendment — ADR-004 (2026-03-29)
+
+Specialists ×4 and evidence **claim evaluation** now use **Ollama** with **`MEDITRON_MODEL`** (default `meditron:70b`), not vLLM. Domain differentiation is prompt-based. Optional **vLLM + LoRA** remains available as a Docker Compose **`vllm-lora`** profile for experiments but is **not** wired to agents in the default build. See [ADR-004](adr-004-meditron-via-ollama.md).

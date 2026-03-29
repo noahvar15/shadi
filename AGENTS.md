@@ -1,6 +1,6 @@
 # Shadi — Agent Guide
 
-Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads patient data via FHIR R4, runs five specialist agents over a shared 70B base model with hot-swapped LoRA adapters, and produces a ranked differential diagnosis before the physician walks in.
+Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads patient data via FHIR R4, runs five specialist agents over a shared **Meditron** model on Ollama (domain-specific prompts), and produces a ranked differential diagnosis before the physician walks in. See ADR-004; optional vLLM+LoRA exists as a Compose profile only.
 
 ---
 
@@ -20,7 +20,7 @@ EHR → FHIR MCP Server → Intake Agent → CaseObject
                            DiagnosticReport (FHIR) + Dashboard
 ```
 
-All agents share a single **Meditron-70B** base model (FP4, ~38 GB) with four LoRA adapters hot-swapped via vLLM. No cloud APIs — PHI stays on the machine.
+Specialists share **Meditron** via Ollama (`MEDITRON_MODEL`, default `meditron:70b`). Other agents use additional Ollama models. No cloud APIs — PHI stays on the machine.
 
 ---
 
@@ -133,7 +133,7 @@ Agents communicate via structured messages in `a2a/`. Valid message types: `ENDO
 1. Specialist agents reason independently in parallel — no cross-talk before the debate round.
 2. Evidence grounding runs after specialist reasoning, before debate.
 3. The safety veto runs last, after consensus, and can block any recommendation unconditionally.
-4. The LoRA adapter for each specialist must match the specialty's training domain exactly.
+4. Each specialist’s **prompts and domain metadata** must match the clinical specialty; weights are shared (`MEDITRON_MODEL`) unless a future ADR reintroduces per-domain adapters.
 
 ---
 

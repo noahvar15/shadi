@@ -107,7 +107,7 @@ These are the moments when two tracks need to sync:
 | **Normalizer API contract** | Before #28 is merged | Noah + Emmanuel agree on the exact `CaseObject` fields that `bundle_to_case` guarantees to populate |
 | **Orchestrator job signature** | Before #39 is merged | Joshua + Emmanuel agree on the arq task signature: `run_diagnostic_pipeline(ctx, case_id: str)` and what the persisted `DifferentialReport` JSON looks like |
 | **API response shapes** | Before #32/#33 are merged | Emmanuel + Ericsen agree on exact JSON field names so mock fixtures match the real responses |
-| **Inference URL config** | Before #36 is merged | Joshua + Emmanuel confirm `OLLAMA_BASE_URL` and `VLLM_BASE_URL` env var names match `api/config.py` `Settings` model |
+| **Inference URL config** | Before #36 is merged | Joshua + Emmanuel confirm `OLLAMA_BASE_URL`, `MEDITRON_MODEL`, and optional `VLLM_BASE_URL` match `api/config.py` / `config.py` settings |
 
 ---
 
@@ -132,7 +132,7 @@ These interfaces are depended on by multiple tracks. Any changes must be communi
 | `DifferentialReport` schema | `agents/schemas.py` | Joshua (produces), Emmanuel (persists), Ericsen (renders) |
 | `SpecialistResult` schema | `agents/schemas.py` | Joshua (produces), orchestrator (consumes) |
 | `VetoDecision` / `SafetyResult` | `agents/schemas.py` | Joshua (produces), orchestrator + Ericsen (consumes) |
-| `OLLAMA_BASE_URL` / `VLLM_BASE_URL` env vars | `.env.example`, `api/config.py` | Emmanuel (defines), Joshua (uses) |
+| `OLLAMA_BASE_URL`, `MEDITRON_MODEL`, optional `VLLM_BASE_URL` | `.env.example`, `config.py`, `api/config.py` | Emmanuel (defines), Joshua (agents) |
 | `INTAKE_QUEUE` arq queue name | `.env.example` | Emmanuel (enqueues), Joshua (arq worker consumes) |
 | `POST /cases` response shape | `api/routes/cases.py` | Emmanuel (defines), Ericsen (consumes) |
 | `GET /reports/{id}` response shape | `api/routes/reports.py` | Emmanuel (defines), Ericsen (consumes) |

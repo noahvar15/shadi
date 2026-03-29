@@ -1,4 +1,4 @@
-"""Live inference smoke: real vLLM + Ollama when ``--live-inference`` is passed."""
+"""Live inference smoke: real Ollama (incl. Meditron) when ``--live-inference`` is passed."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ _RUNNER = _REPO_ROOT / "tests" / "integration" / "run_live_cli.py"
 def test_live_multi_agent_pipeline_cli_output(request: pytest.FixtureRequest) -> None:
     """Spawns a fresh interpreter with MOCK_LLM=false so config/agents load correctly."""
     if not request.config.getoption("--live-inference"):
-        pytest.skip("Pass --live-inference to run against real vLLM/Ollama (slow, needs services).")
+        pytest.skip("Pass --live-inference to run against real Ollama (slow, needs services).")
 
     env = {**os.environ, "MOCK_LLM": "false"}
     proc = subprocess.run(

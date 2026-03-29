@@ -2,7 +2,7 @@
 
 **Multi-agent clinical diagnostic reasoning system for emergency medicine.**
 
-A patient case arrives from the EHR via FHIR R4. Five specialist agents — each running a domain-specific LoRA adapter on a shared 70B base model — reason independently over the case, debate via a structured A2A protocol, and produce a ranked differential diagnosis with confidence scores, evidence citations, and a safety veto layer. The attending physician receives this before walking into the room.
+A patient case arrives from the EHR via FHIR R4. Five specialist agents — each using domain-specific prompts over a shared **Ollama** Meditron model (`MEDITRON_MODEL`, default `meditron:70b`) — reason independently over the case, debate via a structured A2A protocol, and produce a ranked differential diagnosis with confidence scores, evidence citations, and a safety veto layer. The attending physician receives this before walking into the room. See [ADR-004](docs/decisions/adr-004-meditron-via-ollama.md).
 
 ---
 
@@ -21,10 +21,10 @@ flowchart TD
     Intake["Intake Agent\n(SNOMED · LOINC · RxNorm)"]
     CaseObj["CaseObject"]
 
-    Cardio["Cardiology Agent\n(LoRA adapter)"]
-    Neuro["Neurology Agent\n(LoRA adapter)"]
-    Pulm["Pulmonology Agent\n(LoRA adapter)"]
-    Tox["Toxicology Agent\n(LoRA adapter)"]
+    Cardio["Cardiology Agent\n(Meditron + prompt)"]
+    Neuro["Neurology Agent\n(Meditron + prompt)"]
+    Pulm["Pulmonology Agent\n(Meditron + prompt)"]
+    Tox["Toxicology Agent\n(Meditron + prompt)"]
 
     Evidence["Evidence Grounding Agent\n(PubMed + guidelines corpus)"]
     Debate["A2A Debate Round\n(ENDORSE · CHALLENGE · MODIFY)"]
@@ -53,27 +53,23 @@ flowchart TD
 
 ## Model Stack
 
-Two inference servers run side-by-side. vLLM handles the specialists (LoRA hot-swap required); Ollama handles everything else. Both expose an OpenAI-compatible `/v1` API — agents route to the correct server via `inference_url` and `model` class attributes. See [ADR-002](docs/decisions/adr-002-model-assignments.md) for full rationale.
+**Ollama** serves all chat and embedding models, including **`MEDITRON_MODEL`** for the four specialists and evidence claim evaluation ([ADR-004](docs/decisions/adr-004-meditron-via-ollama.md)). Optional **vLLM + LoRA** is available as a Docker Compose **`vllm-lora`** profile for experiments only — agents do not call it by default. See [ADR-002](docs/decisions/adr-002-model-assignments.md) for historical rationale and amendments.
 
-| Agent | Model | Server | Approx VRAM |
-|---|---|---|---|
-| Image analysis | `alibayram/medgemma:27b` | Ollama | ~17 GB |
-| Intake | `qwen2.5:7b` | Ollama | ~4.5 GB |
-| Specialists ×4 (base) | `meditron:70b` FP4 | vLLM | ~38 GB |
-| Specialist LoRA adapters ×4 | cardiology / neurology / pulmonology / toxicology | vLLM | ~8 GB |
-| Evidence (retrieval) | `nomic-embed-text` | Ollama | ~0.5 GB |
-| Evidence (claim eval) | `meditron:70b` (reuse) | vLLM | — |
-| Safety veto | `phi4:14b` | Ollama | ~8 GB |
-| Orchestrator synthesis | `deepseek-r1:32b` | Ollama | ~19 GB |
-| **Model subtotal** | | | **~94 GB** |
-| OS + services | | | ~15–20 GB |
-| **Grand total** | | | **~109–114 GB** |
+| Agent | Model | Approx VRAM (indicative) |
+|---|---|---|
+| Image analysis | `alibayram/medgemma:27b` | ~17 GB |
+| Intake | `qwen2.5:7b` | ~4.5 GB |
+| Specialists ×4 | `meditron:70b` (shared Ollama tag) | ~39 GB |
+| Evidence (retrieval) | `nomic-embed-text` | ~0.5 GB |
+| Evidence (claim eval) | `meditron:70b` (same load) | — |
+| Safety veto | `phi4:14b` | ~8 GB |
+| Orchestrator synthesis | `deepseek-r1:32b` | ~19 GB |
 
-The DGX Spark's 128 GB unified memory leaves ~14–19 GB headroom for the evidence corpus index and concurrent case spikes. A laptop OOMs before the first specialist model finishes loading.
+VRAM totals depend on quantization tags and concurrent loads; size a machine for the sum of models you keep resident. See Ollama library pages for each tag.
 
-### The LoRA Adapter Trick
+### Specialists and Meditron
 
-The four specialist agents share a single `meditron:70b` base load in FP4 (~38 GB). vLLM hot-swaps a domain LoRA adapter (~2 GB each) per request via `--enable-lora`. The result: four genuinely differentiated clinical specialists for the memory cost of one model. Loading four separate 70B weights would require ~160 GB — exceeding the hardware budget entirely.
+All four specialists call the **same** Ollama model id (`MEDITRON_MODEL`). Clinical differentiation comes from **system prompts** and **domain metadata**, not separate weight loads. To use another Meditron build, set `MEDITRON_MODEL` (e.g. `meditron:70b-q4_K_S`) and `ollama pull` that tag.
 
 ---
 
@@ -123,79 +119,10 @@ cp .env.example .env
 docker compose up
 ```
 
-On first boot, pull the Ollama models (vLLM loads Meditron from the path in `.env`):
+On first boot, pull Ollama models (container name may vary — use `docker compose ps`):
 
 ```bash
-docker exec shadi-ollama-1 ollama pull alibayram/medgemma:27b
-docker exec shadi-ollama-1 ollama pull qwen2.5:7b
-docker exec shadi-ollama-1 ollama pull nomic-embed-text
-docker exec shadi-ollama-1 ollama pull phi4:14b
-docker exec shadi-ollama-1 ollama pull deepseek-r1:32b
-```
-
-Services:
-- `http://localhost:8000` — FastAPI backend
-- `http://localhost:3000` — Physician dashboard
-- `http://localhost:8080` — vLLM inference server (meditron:70b + LoRA)
-- `http://localhost:11434` — Ollama inference server (all other models)
-
-### vLLM without LoRA adapters (development)
-
-The default Compose file starts vLLM with four LoRA module paths. If those directories are missing, use the merge file from [ADR-003](docs/decisions/adr-003-vllm-base-only-development.md):
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.vllm-base.yml up -d vllm
-```
-
-After the server is healthy, discover the OpenAI model id and set it in `.env`:
-
-```bash
-curl -s http://localhost:8080/v1/models
-```
-
-Set `VLLM_SPECIALIST_MODEL` and `VLLM_CLAIM_EVAL_MODEL` to that id (often the same string vLLM lists for the loaded checkpoint). Specialists still use domain-specific prompts; only the served weights are shared.
-
-To confirm LoRA layout before using the default vLLM service:
-
-```bash
-chmod +x scripts/verify_lora_adapters.sh
-./scripts/verify_lora_adapters.sh
-```
-
-**`verify_lora_adapters.sh` exits 0 only when the layout is valid; otherwise it exits 1.** Until then, pick one:
-
-1. **Full LoRA** — Set `LORA_ADAPTERS_PATH` in `.env` to a directory that contains `cardiology/`, `neurology/`, `pulmonology/`, and `toxicology/` with real adapter checkpoints (create that tree or reuse an existing one).
-2. **No LoRA yet** — Use `docker-compose.vllm-base.yml`, set `VLLM_SPECIALIST_MODEL` and `VLLM_CLAIM_EVAL_MODEL` from `GET /v1/models` ([ADR-003](docs/decisions/adr-003-vllm-base-only-development.md)); do not rely on default Compose `vllm` `--lora-modules` until adapters exist.
-
-### Full case output (Docker Compose — real models + DB)
-
-Use this when you want **vLLM, Ollama, Postgres, Redis, API, and the arq worker** all running and a **complete diagnostic report** (not `MOCK_LLM`).
-
-**1. Configure `.env` (from `.env.example`)**
-
-- Set **`MOCK_LLM=false`** so the API/worker call real inference.
-- Set **`MODEL_BASE_PATH`** and **`LORA_ADAPTERS_PATH`** to your Meditron base weights and four LoRA dirs (or use [ADR-003](docs/decisions/adr-003-vllm-base-only-development.md) base-only Compose + `VLLM_SPECIALIST_MODEL` / `VLLM_CLAIM_EVAL_MODEL`).
-- Set a real **`API_SECRET_KEY`** (not a placeholder).
-- Ensure **`EVIDENCE_INDEX_PATH`** on the host exists and points at your evidence index (Compose mounts it read-only into the API). Create an empty directory if you only need the stack to start; evidence quality depends on a real index.
-- Leave **`DATABASE_URL`** in `.env` as localhost for host-side tools; **Compose overrides** `DATABASE_URL`, `VLLM_BASE_URL`, and `OLLAMA_BASE_URL` inside `api` / `worker` automatically.
-
-**2. LoRA layout (skip if using `docker-compose.vllm-base.yml`)**
-
-```bash
-./scripts/verify_lora_adapters.sh
-```
-
-**3. Start the stack**
-
-```bash
-docker compose up -d
-```
-
-Wait until `postgres`, `redis`, `vllm`, `ollama`, `api`, and `worker` are healthy (`docker compose ps`).
-
-**4. Pull Ollama models (first time only)**
-
-```bash
+docker compose exec ollama ollama pull meditron:70b
 docker compose exec ollama ollama pull alibayram/medgemma:27b
 docker compose exec ollama ollama pull qwen2.5:7b
 docker compose exec ollama ollama pull nomic-embed-text
@@ -203,15 +130,54 @@ docker compose exec ollama ollama pull phi4:14b
 docker compose exec ollama ollama pull deepseek-r1:32b
 ```
 
-**5. Smoke-check inference**
+Services:
+- `http://localhost:8000` — FastAPI backend
+- `http://localhost:3000` — Physician dashboard
+- `http://localhost:11434` — Ollama (all models, including Meditron for specialists — [ADR-004](docs/decisions/adr-004-meditron-via-ollama.md))
+
+### Optional vLLM (`vllm-lora` profile)
+
+The **`vllm`** service is **not** started by default and is **not** used by agents after ADR-004. To run it for experiments (HF weights + LoRA), use `--profile vllm-lora`, set `MODEL_BASE_PATH` / `LORA_ADAPTERS_PATH`, and run `./scripts/check_vllm_model_base.sh` before expecting `:8080` to answer. See [ADR-003](docs/decisions/adr-003-vllm-base-only-development.md).
+
+### Full case output (Docker Compose — real models + DB)
+
+Use this when you want **Ollama, Postgres, Redis, API, and the arq worker** all running and a **complete diagnostic report** (not `MOCK_LLM`).
+
+**1. Configure `.env` (from `.env.example`)**
+
+- Set **`MOCK_LLM=false`** so the API/worker call real inference.
+- Set **`MEDITRON_MODEL`** if you use a non-default Meditron tag (default `meditron:70b`).
+- Set a real **`API_SECRET_KEY`** (not a placeholder).
+- Ensure **`EVIDENCE_INDEX_PATH`** on the host exists and points at your evidence index (Compose mounts it read-only into the API). Create an empty directory if you only need the stack to start; evidence quality depends on a real index.
+- Leave **`DATABASE_URL`** in `.env` as localhost for host-side tools; **Compose overrides** `DATABASE_URL` and `OLLAMA_BASE_URL` inside `api` / `worker` automatically.
+
+**2. Start the stack**
 
 ```bash
-curl -sf http://localhost:8080/health
+docker compose up -d
+```
+
+Wait until `postgres`, `redis`, `ollama`, `api`, and `worker` are healthy (`docker compose ps`).
+
+**3. Pull Ollama models (first time only)**
+
+```bash
+docker compose exec ollama ollama pull meditron:70b
+docker compose exec ollama ollama pull alibayram/medgemma:27b
+docker compose exec ollama ollama pull qwen2.5:7b
+docker compose exec ollama ollama pull nomic-embed-text
+docker compose exec ollama ollama pull phi4:14b
+docker compose exec ollama ollama pull deepseek-r1:32b
+```
+
+**4. Smoke-check inference**
+
+```bash
 curl -sf http://localhost:11434/api/tags
 curl -sf http://localhost:8000/health
 ```
 
-**6. Enqueue a case and read the report**
+**5. Enqueue a case and read the report**
 
 Full **`CaseObject` from FHIR** (requires a valid bundle for your normalizer), or temporarily **`SHADI_STUB_CASE_INTAKE=1`** in `.env` with any JSON body for a stub case (restart `api` + `worker` after changing `.env`).
 
@@ -236,9 +202,9 @@ curl -s "http://localhost:8000/reports/${CASE_ID}" | python3 -m json.tool
 
 If `sample_bundle.json` returns **422**, the normalizer rejected it — use a bundle that matches `CaseObject.from_fhir_bundle` or enable **`SHADI_STUB_CASE_INTAKE=1`** for an end-to-end wiring check.
 
-**7. Optional: live orchestrator on the host (same models as `.env`)**
+**6. Optional: live orchestrator on the host (same models as `.env`)**
 
-Requires **Postgres and inference reachable from the host** (`localhost:5432`, `8080`, `11434`) and **`.venv`** with the package installed:
+Requires **Postgres and Ollama reachable from the host** (`localhost:5432`, `11434`) and **`.venv`** with the package installed:
 
 ```bash
 export MOCK_LLM=false
@@ -257,12 +223,15 @@ python3 -m venv .venv
 ./scripts/run_tests.sh
 # Or: .venv/bin/python -m pytest tests/ -q
 
-# Multi-agent CLI demo (mock LLM; no vLLM/Ollama). With a repo ``.venv``,
-# ``python3 -m tools.shadi_run_case_cli`` re-runs under ``.venv/bin/python``.
+# Multi-agent CLI: full orchestrator, formatted report on stdout (MOCK_LLM; no Ollama).
+# Re-runs under ``.venv/bin/python`` when a repo ``.venv`` exists.
 python3 -m tools.shadi_run_case_cli
+# Optional: mock triage narrative → FHIR bundle (issue #70) → same pipeline
+python3 -m tools.shadi_run_case_cli --triage-text "Chest pain x2h, diaphoretic." --chief-complaint "Chest pain"
+# Real Ollama + Postgres (uses ``.env``; slow):
+python3 -m tools.shadi_run_case_cli --live
 
-# Same pipeline against **real** vLLM + Ollama (``MOCK_LLM=false`` in a subprocess only;
-# slow, requires models up — see ADR-002):
+# Same pipeline via pytest (``MOCK_LLM=false`` subprocess; see ADR-002 / ADR-004):
 # .venv/bin/python -m pytest tests/integration/test_shadi_live_cli_output.py --live-inference -s
 
 # API locally
@@ -291,7 +260,7 @@ shadi/
 │   └── orchestrator/            # Fan-out, A2A debate, synthesis
 ├── shadi_fhir/                  # FHIR R4 normalizer + MCP (OAuth #26, Subscription/notify #27, teardown #29)
 ├── a2a/                         # A2A protocol schema + debate round logic
-├── models/                      # vLLM engine + LoRA adapter management
+├── models/                      # Optional local inference helpers (vLLM-related)
 ├── api/                         # FastAPI app + routes
 ├── dashboard/                   # Next.js physician dashboard
 ├── docs/decisions/              # Architecture Decision Records
@@ -308,7 +277,8 @@ shadi/
 |---|---|
 | [ADR-001](docs/decisions/adr-001-architecture.md) | LoRA adapter strategy, A2A protocol design, air-gap rationale |
 | [ADR-002](docs/decisions/adr-002-model-assignments.md) | Ollama model assignments per agent, two-server strategy, memory budget |
-| [ADR-003](docs/decisions/adr-003-vllm-base-only-development.md) | Optional base-only vLLM Compose merge + env overrides when LoRAs are absent |
+| [ADR-003](docs/decisions/adr-003-vllm-base-only-development.md) | Optional vLLM Compose profile (`vllm-lora`) + HF base path preflight |
+| [ADR-004](docs/decisions/adr-004-meditron-via-ollama.md) | Specialists + claim eval use Ollama `MEDITRON_MODEL` (default `meditron:70b`) |
 
 ---
 

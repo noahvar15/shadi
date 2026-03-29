@@ -1,10 +1,11 @@
 services:
 
-  # ─── Inference: vLLM (specialists) ───────────────────────────────────────────
-  # Serves meditron:70b in FP4 with four hot-swappable LoRA adapters
-  # (cardiology, neurology, pulmonology, toxicology). vLLM is used exclusively
-  # here because Ollama does not support LoRA hot-swapping. See ADR-002.
+  # ─── Inference: vLLM (optional LoRA experiments — not used by agents after ADR-004) ─
+  # Start with: docker compose --profile vllm-lora up -d vllm
+  # Preflight (host): ./scripts/check_vllm_model_base.sh
   vllm:
+    profiles:
+      - vllm-lora
     image: vllm/vllm-openai:latest
     runtime: nvidia
     environment:
@@ -21,8 +22,7 @@ services:
         neurology=/models/adapters/neurology
         pulmonology=/models/adapters/pulmonology
         toxicology=/models/adapters/toxicology
-      --quantization fp4
-      --max-model-len 8192
+      --max-model-len 4096
       --port 8080
     ports:
       - "8080:8080"
@@ -33,10 +33,9 @@ services:
       retries: 5
       start_period: 120s
 
-  # ─── Inference: Ollama (all non-specialist agents) ───────────────────────────
-  # Serves: alibayram/medgemma:27b (image), qwen2.5:7b (intake), nomic-embed-text
-  # (evidence retrieval), phi4:14b (safety veto), deepseek-r1:32b (orchestrator).
-  # All expose an OpenAI-compatible /v1 endpoint identical to vLLM. See ADR-002.
+  # ─── Inference: Ollama (all chat + embed models, including Meditron for specialists) ─
+  # Serves: meditron:70b (specialists + claim eval, ADR-004), alibayram/medgemma:27b,
+  # qwen2.5:7b, nomic-embed-text, phi4:14b, deepseek-r1:32b. OpenAI-compatible /v1.
   ollama:
     image: ollama/ollama:latest
     runtime: nvidia
@@ -92,22 +91,22 @@ services:
       - DATABASE_URL=postgresql+asyncpg://shadi:shadi@postgres:5432/shadi
       - REDIS_URL=redis://redis:6379/0
       - API_SECRET_KEY=${API_SECRET_KEY:-change-me-before-production}
-      - VLLM_BASE_URL=http://vllm:8080/v1
       - OLLAMA_BASE_URL=http://ollama:11434/v1
-      # Model assignments — see ADR-002
+      # Model assignments — see ADR-002, ADR-004
+      - MEDITRON_MODEL=${MEDITRON_MODEL:-meditron:70b}
       - IMAGE_MODEL=alibayram/medgemma:27b
       - INTAKE_MODEL=qwen2.5:7b
       - EVIDENCE_EMBED_MODEL=nomic-embed-text
       - SAFETY_MODEL=phi4:14b
       - ORCHESTRATOR_MODEL=deepseek-r1:32b
+      - LLM_HTTP_TIMEOUT_SECONDS=${LLM_HTTP_TIMEOUT_SECONDS:-600}
+      - SPECIALISTS_PARALLEL=${SPECIALISTS_PARALLEL:-false}
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      vllm:
         condition: service_healthy
       ollama:
         condition: service_healthy
@@ -131,14 +130,17 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - API_SECRET_KEY=${API_SECRET_KEY:-dev-local-only-set-a-long-random-secret}
       - INTAKE_QUEUE=${INTAKE_QUEUE:-arq:intake}
-      - VLLM_BASE_URL=http://vllm:8080/v1
       - OLLAMA_BASE_URL=http://ollama:11434/v1
+      - MEDITRON_MODEL=${MEDITRON_MODEL:-meditron:70b}
+      - ORCHESTRATOR_MODEL=${ORCHESTRATOR_MODEL:-deepseek-r1:32b}
+      - SAFETY_MODEL=${SAFETY_MODEL:-phi4:14b}
+      - EVIDENCE_EMBED_MODEL=${EVIDENCE_EMBED_MODEL:-nomic-embed-text}
+      - LLM_HTTP_TIMEOUT_SECONDS=${LLM_HTTP_TIMEOUT_SECONDS:-600}
+      - SPECIALISTS_PARALLEL=${SPECIALISTS_PARALLEL:-false}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      vllm:
         condition: service_healthy
       ollama:
         condition: service_healthy

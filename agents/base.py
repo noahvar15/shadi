@@ -6,19 +6,14 @@ receive a CaseObject, produce a typed result, emit structured logs.
 
 Inference routing
 -----------------
-Two inference servers run in parallel (see ADR-002):
+**Ollama** (``OLLAMA_BASE_URL``, default port 11434) serves all chat models
+(see ADR-002, ADR-004): ``MEDITRON_MODEL`` (default ``meditron:70b``) for the
+four specialists and evidence claim evaluation; ``alibayram/medgemma:27b`` (image),
+``qwen2.5:7b`` (intake), ``nomic-embed-text`` (embeddings), ``phi4:14b`` (safety),
+``deepseek-r1:32b`` (orchestrator).
 
-- **vLLM** (``VLLM_BASE_URL``, default port 8080) — serves ``meditron:70b``
-  with hot-swappable LoRA adapters for the four specialist agents. Required
-  because Ollama does not support LoRA hot-swapping.
-
-- **Ollama** (``OLLAMA_BASE_URL``, default port 11434) — serves all other
-  models: ``alibayram/medgemma:27b`` (image), ``qwen2.5:7b`` (intake),
-  ``nomic-embed-text`` (evidence retrieval), ``phi4:14b`` (safety veto),
-  ``deepseek-r1:32b`` (orchestrator).
-
-Both expose an OpenAI-compatible ``/v1`` endpoint. Subclasses select the
-correct server by setting ``inference_url`` and ``model`` as class attributes.
+Subclasses set ``inference_url`` and ``model`` as class attributes. All use the
+same OpenAI-compatible ``/v1/chat/completions`` convention.
 """
 
 from __future__ import annotations
@@ -50,14 +45,12 @@ class BaseAgent(ABC, Generic[TResult]):
     domain : str
         Domain label used for LoRA adapter selection and message routing.
     inference_url : str
-        Base URL of the inference server this agent calls. Set to
-        ``VLLM_BASE_URL`` for specialist agents (LoRA hot-swap) or
-        ``OLLAMA_BASE_URL`` for all other agents.
+        Base URL of the inference server. All current agents use
+        ``OLLAMA_BASE_URL``.
     model : str
-        Model or adapter name passed to the inference endpoint.
-
-        Specialist agents use the LoRA adapter name (e.g. ``"cardiology"``);
-        all others use the Ollama model tag (e.g. ``"phi4:14b"``).
+        Model tag passed to the inference endpoint (e.g. ``MEDITRON_MODEL`` or
+        ``"phi4:14b"``). Specialist domains still differ by system prompt and
+        ``domain``, not by separate weight loads (ADR-004).
     """
 
     #: Human-readable name used in logs and A2A messages.
@@ -114,10 +107,8 @@ class BaseAgent(ABC, Generic[TResult]):
         3. Parse the response into a typed result object
         4. Return the result — do NOT write to any shared state here
 
-        Specialist agents call vLLM with a LoRA adapter name; all other agents
-        call Ollama with a model tag. The calling convention is identical for
-        both because both servers implement the OpenAI ``/v1/chat/completions``
-        spec. See ADR-002.
+        POST to ``self.inference_url`` using ``self.model`` (Ollama OpenAI
+        compatibility). See ADR-002 and ADR-004.
 
         Side effects belong in the orchestrator, not in ``reason``.
 

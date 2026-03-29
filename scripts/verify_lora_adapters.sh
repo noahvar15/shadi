@@ -38,7 +38,7 @@ if ((${#missing[@]})); then
   echo "Missing subdirs: ${missing[*]}"
   echo "LoRA checkpoints are not in the git repo."
   echo "Either add cardiology/, neurology/, pulmonology/, toxicology/ under the path above,"
-  echo "or use docker-compose.vllm-base.yml plus VLLM_SPECIALIST_MODEL (see ADR-003)."
+  echo "Optional vLLM LoRA stack: docker compose --profile vllm-lora (see ADR-003); agents use Ollama Meditron (ADR-004)."
   exit 1
 fi
 

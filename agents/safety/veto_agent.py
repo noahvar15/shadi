@@ -127,7 +127,7 @@ class SafetyVetoAgent(BaseAgent[SafetyResult]):
 
     name = "safety-veto"
     domain = "safety"
-    model = "phi4:14b"
+    model = settings.SAFETY_MODEL
     inference_url = settings.OLLAMA_BASE_URL
 
     # -------------------------------------------------------------------------

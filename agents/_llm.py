@@ -28,8 +28,9 @@ _shared_http_client: httpx.AsyncClient | None = None
 async def _get_shared_http_client() -> httpx.AsyncClient:
     global _shared_http_client
     if _shared_http_client is None:
+        # Per-request timeouts in ``call_chat`` override this; keep pool defaults generous.
         _shared_http_client = httpx.AsyncClient(
-            timeout=120.0,
+            timeout=httpx.Timeout(connect=60.0, read=600.0, write=60.0, pool=60.0),
             limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
         )
     return _shared_http_client
@@ -261,8 +262,22 @@ async def call_chat(
     if response_format is not None:
         payload["response_format"] = response_format
 
+    read_s = float(settings.LLM_HTTP_TIMEOUT_SECONDS)
+    req_timeout = httpx.Timeout(connect=60.0, read=read_s, write=60.0, pool=60.0)
     client = await _get_shared_http_client()
-    resp = await client.post(f"{base_url}/chat/completions", json=payload)
-    resp.raise_for_status()
+    resp = await client.post(
+        f"{base_url}/chat/completions",
+        json=payload,
+        timeout=req_timeout,
+    )
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        hint = ""
+        if exc.response.status_code == 404:
+            hint = f" Model {model!r} may be missing — run: ollama pull {model}"
+        raise RuntimeError(
+            f"Inference HTTP {exc.response.status_code} for {base_url}/chat/completions.{hint}"
+        ) from exc
     data = resp.json()
     return str(data["choices"][0]["message"]["content"])

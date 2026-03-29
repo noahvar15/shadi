@@ -73,11 +73,19 @@ class Orchestrator:
         log = logger.bind(case_id=str(case.case_id))
         log.info("orchestrator.run.start")
 
-        # ── 1. Parallel specialist reasoning ──────────────────────────────────
-        raw_results = await asyncio.gather(
-            *[agent.run(case) for agent in self._specialists],
-            return_exceptions=True,
-        )
+        # ── 1. Specialist reasoning (parallel or sequential — see SPECIALISTS_PARALLEL) ─
+        if settings.SPECIALISTS_PARALLEL:
+            raw_results = await asyncio.gather(
+                *[agent.run(case) for agent in self._specialists],
+                return_exceptions=True,
+            )
+        else:
+            raw_results = []
+            for agent in self._specialists:
+                try:
+                    raw_results.append(await agent.run(case))
+                except BaseException as exc:  # noqa: BLE001 — mirror gather(return_exceptions=True)
+                    raw_results.append(exc)
         specialist_results: list[SpecialistResult] = []
         for agent, outcome in zip(self._specialists, raw_results):
             if isinstance(outcome, BaseException):
@@ -173,7 +181,7 @@ class Orchestrator:
         try:
             raw = await call_chat(
                 settings.OLLAMA_BASE_URL,
-                "deepseek-r1:32b",
+                settings.ORCHESTRATOR_MODEL,
                 [
                     {"role": "system", "content": _SYNTHESIS_SYSTEM},
                     {"role": "user", "content": synthesis_user},

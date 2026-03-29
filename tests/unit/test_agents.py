@@ -8,7 +8,7 @@ Coverage:
   - Async tests use ``@pytest.mark.asyncio`` explicitly (in addition to
     ``asyncio_mode = auto`` in ``pyproject.toml``).
   - BaseAgent.describe() contract for all six agents
-  - inference_url routing: Ollama for intake/image, vLLM for specialists
+  - inference_url routing: Ollama for intake, image, specialists, evidence
   - IntakeAgent.run() populates case.conditions / observations / medications
   - ImageAnalysisAgent early-exit when imaging_attachments is empty
   - ImageAnalysisAgent returns diagnoses when attachments are present
@@ -96,10 +96,10 @@ def test_describe_returns_correct_values():
     expected = {
         IntakeAgent: ("intake", "intake", "qwen2.5:7b"),
         ImageAnalysisAgent: ("image-analysis", "imaging", "alibayram/medgemma:27b"),
-        CardiologyAgent: ("cardiology", "cardiology", "cardiology"),
-        NeurologyAgent: ("neurology", "neurology", "neurology"),
-        PulmonologyAgent: ("pulmonology", "pulmonology", "pulmonology"),
-        ToxicologyAgent: ("toxicology", "toxicology", "toxicology"),
+        CardiologyAgent: ("cardiology", "cardiology", settings.MEDITRON_MODEL),
+        NeurologyAgent: ("neurology", "neurology", settings.MEDITRON_MODEL),
+        PulmonologyAgent: ("pulmonology", "pulmonology", settings.MEDITRON_MODEL),
+        ToxicologyAgent: ("toxicology", "toxicology", settings.MEDITRON_MODEL),
     }
     for AgentClass, (name, domain, model) in expected.items():
         agent = AgentClass()
@@ -112,10 +112,10 @@ def test_describe_returns_correct_values():
 # ── inference_url routing ─────────────────────────────────────────────────────
 
 
-def test_specialist_agents_use_vllm():
+def test_specialist_agents_use_ollama_meditron():
     for AgentClass in [CardiologyAgent, NeurologyAgent, PulmonologyAgent, ToxicologyAgent]:
-        assert AgentClass.inference_url == settings.VLLM_BASE_URL, (
-            f"{AgentClass.__name__} should use VLLM_BASE_URL"
+        assert AgentClass.inference_url == settings.OLLAMA_BASE_URL, (
+            f"{AgentClass.__name__} should use OLLAMA_BASE_URL"
         )
 
 
@@ -360,7 +360,7 @@ def test_evidence_agent_describe():
     d = EvidenceAgent().describe()
     assert d["name"] == "evidence"
     assert d["domain"] == "evidence"
-    assert d["model"] == "nomic-embed-text"
+    assert d["model"] == settings.EVIDENCE_EMBED_MODEL
 
 
 def test_evidence_agent_uses_ollama():
@@ -439,7 +439,7 @@ async def test_evidence_agent_empty_pgvector_no_crash():
     ):
         mock_settings.MOCK_LLM = False
         mock_settings.OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
-        mock_settings.VLLM_BASE_URL = settings.VLLM_BASE_URL
+        mock_settings.MEDITRON_MODEL = settings.MEDITRON_MODEL
         mock_settings.DATABASE_URL = "postgresql+asyncpg://shadi:shadi@localhost:5432/shadi"
 
         result = await EvidenceAgent().run(case, [_EVIDENCE_SPECIALIST_RESULT])
@@ -468,7 +468,7 @@ async def test_evidence_agent_supports_attaches_citation():
     ):
         mock_settings.MOCK_LLM = False
         mock_settings.OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
-        mock_settings.VLLM_BASE_URL = settings.VLLM_BASE_URL
+        mock_settings.MEDITRON_MODEL = settings.MEDITRON_MODEL
         mock_settings.DATABASE_URL = "postgresql+asyncpg://shadi:shadi@localhost:5432/shadi"
 
         result = await EvidenceAgent().run(case, [fresh_specialist_result()])
@@ -501,7 +501,7 @@ async def test_evidence_agent_refutes_no_citation():
     ):
         mock_settings.MOCK_LLM = False
         mock_settings.OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
-        mock_settings.VLLM_BASE_URL = settings.VLLM_BASE_URL
+        mock_settings.MEDITRON_MODEL = settings.MEDITRON_MODEL
         mock_settings.DATABASE_URL = "postgresql+asyncpg://shadi:shadi@localhost:5432/shadi"
 
         result = await EvidenceAgent().run(case, [fresh_specialist_result()])
@@ -549,7 +549,7 @@ def test_safety_veto_describe():
     d = SafetyVetoAgent().describe()
     assert d["name"] == "safety-veto"
     assert d["domain"] == "safety"
-    assert d["model"] == "phi4:14b"
+    assert d["model"] == settings.SAFETY_MODEL
 
 
 def test_safety_veto_uses_ollama():
