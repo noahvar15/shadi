@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
-import { Loader2, ImagePlus, X } from 'lucide-react'
+import { Check, Loader2, ImagePlus, X } from 'lucide-react'
 import { api } from '@/lib/api'
 
 interface CreateCasePayload {
@@ -14,6 +14,12 @@ interface CreateCasePayload {
 
 interface CreateCaseResponse {
   case_id: string
+}
+
+interface SelectedPatient {
+  patient_id: string
+  patient_name: string
+  dob: string | null
 }
 
 const MENTAL_STATUS_OPTIONS = [
@@ -49,8 +55,10 @@ const LABEL = 'block text-sm font-medium text-[var(--foreground)] mb-1'
 
 export default function NursePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
-  // Patient info
+  // Patient — populated from URL params when selected via header search
+  const [selectedPatient, setSelectedPatient] = useState<SelectedPatient | null>(null)
   const [patientName, setPatientName] = useState('')
   const [patientStubId, setPatientStubId] = useState('')
   const [dateTime, setDateTime] = useState('')
@@ -102,6 +110,19 @@ export default function NursePage() {
       // ignore
     }
   }, [])
+
+  // Populate patient fields from URL params set by the header search
+  useEffect(() => {
+    const pid = searchParams.get('patient_id')
+    const pname = searchParams.get('patient_name')
+    const dob = searchParams.get('dob')
+    if (pid && pname) {
+      const pt: SelectedPatient = { patient_id: pid, patient_name: pname, dob: dob || null }
+      setSelectedPatient(pt)
+      setPatientName(pname)
+      setPatientStubId(pid)
+    }
+  }, [searchParams])
 
   const { mutate, isPending, error: mutationError } = useMutation<
     CreateCaseResponse,
@@ -183,6 +204,29 @@ export default function NursePage() {
         {/* Section 1 — Patient Info */}
         <div className={CARD}>
           <h2 className={SECTION_HEADER}>Patient Information</h2>
+          {selectedPatient && (
+            <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+              <Check size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" aria-hidden="true" />
+              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Returning patient</span>
+              {selectedPatient.dob && (
+                <span className="text-sm text-emerald-600 dark:text-emerald-400">
+                  · DOB: {new Date(selectedPatient.dob + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPatient(null)
+                  setPatientName('')
+                  setPatientStubId('')
+                  router.push('/nurse')
+                }}
+                className="ml-auto text-xs text-emerald-600 dark:text-emerald-400 underline hover:text-emerald-800 dark:hover:text-emerald-200 cursor-pointer"
+              >
+                Change patient
+              </button>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="sm:col-span-1">
               <label htmlFor="patient_name" className={LABEL}>
@@ -192,10 +236,11 @@ export default function NursePage() {
                 id="patient_name"
                 type="text"
                 required
+                readOnly={!!selectedPatient}
                 value={patientName}
-                onChange={(e) => setPatientName(e.target.value)}
+                onChange={(e) => !selectedPatient && setPatientName(e.target.value)}
                 placeholder="Full name"
-                className={INPUT_BASE}
+                className={`${INPUT_BASE} ${selectedPatient ? 'opacity-75 cursor-default' : ''}`}
               />
             </div>
             <div>
@@ -206,10 +251,11 @@ export default function NursePage() {
               <input
                 id="patient_stub_id"
                 type="text"
+                readOnly={!!selectedPatient}
                 value={patientStubId}
-                onChange={(e) => setPatientStubId(e.target.value)}
+                onChange={(e) => !selectedPatient && setPatientStubId(e.target.value)}
                 placeholder="e.g. PT-2024-001"
-                className={`${INPUT_BASE} font-mono placeholder:font-sans`}
+                className={`${INPUT_BASE} font-mono placeholder:font-sans ${selectedPatient ? 'opacity-75 cursor-default' : ''}`}
               />
             </div>
             <div>

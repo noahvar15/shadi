@@ -5,6 +5,14 @@ import type { DifferentialReport } from '@/types/report'
 
 let caseCounter = 1000
 
+const MOCK_PATIENTS = [
+  { patient_id: 'PT-DEMO-001', patient_name: 'Maria Gonzalez', dob: '1978-04-15' },
+  { patient_id: 'PT-DEMO-002', patient_name: 'James Okafor', dob: '1955-09-22' },
+  { patient_id: 'PT-DEMO-003', patient_name: 'Helen Park', dob: '1990-03-07' },
+  { patient_id: 'PT-DEMO-004', patient_name: 'Robert Chen', dob: '1963-11-30' },
+  { patient_id: 'PT-DEMO-005', patient_name: 'Angela Torres', dob: '2001-07-19' },
+]
+
 interface MockCase {
   case_id: string
   patient_id: string
@@ -87,6 +95,16 @@ const MOCK_REPORT: DifferentialReport = {
 }
 
 export const handlers = [
+  // ── Patient search ───────────────────────────────────────────────────────────
+  http.get('/api/patients/search', ({ request }) => {
+    const query = new URL(request.url).searchParams.get('name') ?? ''
+    const lower = query.toLowerCase()
+    const results = MOCK_PATIENTS.filter((p) =>
+      p.patient_name.toLowerCase().includes(lower)
+    )
+    return HttpResponse.json(results)
+  }),
+
   // ── Cases list ──────────────────────────────────────────────────────────────
   http.get('/api/cases', () => {
     return HttpResponse.json(MOCK_CASES)
