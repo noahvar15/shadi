@@ -33,5 +33,10 @@
     "postcss": "^8.4.49",
     "eslint": "^9.15.0",
     "eslint-config-next": "15.1.0"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }
