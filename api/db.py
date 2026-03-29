@@ -28,10 +28,12 @@ _CHECK_VALUES_SQL = ", ".join(f"'{s}'" for s in VALID_CASE_STATUSES)
 
 
 def _asyncpg_dsn(database_url: str) -> str:
+    """Return a DSN string asyncpg accepts (strip SQLAlchemy-style ``+asyncpg``)."""
     return database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
 
 
 async def init_pool(database_url: str) -> asyncpg.Pool:
+    """Open a pool and run ``ensure_schema``; close the pool if schema setup fails."""
     pool = await asyncpg.create_pool(_asyncpg_dsn(database_url), min_size=1, max_size=10)
     try:
         await ensure_schema(pool)
@@ -62,35 +64,25 @@ async def ensure_schema(pool: asyncpg.Pool) -> None:
             "CREATE INDEX IF NOT EXISTS idx_cases_created_at ON cases (created_at DESC)",
         )
 
-        await conn.execute(
+        # Constraint: duplicate-safe under concurrent ensure_schema (no pg_constraint TOCTOU).
+        # _CHECK_VALUES_SQL is built only from VALID_CASE_STATUSES literals.
+        await conn.execute(  # noqa: S608
             f"""
             DO $$
             BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint
-                WHERE conname = 'cases_status_check'
-                  AND conrelid = 'public.cases'::regclass
-              ) THEN
-                ALTER TABLE cases ADD CONSTRAINT cases_status_check
-                  CHECK (status IN ({_CHECK_VALUES_SQL}));
-              END IF;
+              ALTER TABLE public.cases ADD CONSTRAINT cases_status_check
+                CHECK (status IN ({_CHECK_VALUES_SQL}));
+            EXCEPTION
+              WHEN duplicate_object THEN NULL;
             END
             $$;
             """
         )
 
         await conn.execute("""
-            DO $$
-            BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = 'cases' AND column_name = 'patient_id'
-              ) THEN
-                ALTER TABLE cases ADD COLUMN patient_id TEXT
-                  GENERATED ALWAYS AS ((case_json->>'patient_id')) STORED;
-              END IF;
-            END
-            $$;
+            ALTER TABLE public.cases
+            ADD COLUMN IF NOT EXISTS patient_id TEXT
+            GENERATED ALWAYS AS ((case_json->>'patient_id')) STORED;
         """)
 
         await conn.execute("""
@@ -109,25 +101,16 @@ async def ensure_schema(pool: asyncpg.Pool) -> None:
         """)
 
         await conn.execute("""
-            DO $$
-            BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM pg_trigger
-                WHERE tgname = 'cases_touch_updated_at'
-                  AND tgrelid = 'public.cases'::regclass
-              ) THEN
-                CREATE TRIGGER cases_touch_updated_at
-                  BEFORE UPDATE ON public.cases
-                  FOR EACH ROW
-                  EXECUTE FUNCTION shadi_touch_cases_updated_at();
-              END IF;
-            END
-            $$;
+            CREATE OR REPLACE TRIGGER cases_touch_updated_at
+              BEFORE UPDATE ON public.cases
+              FOR EACH ROW
+              EXECUTE FUNCTION shadi_touch_cases_updated_at();
         """)
 
     logger.info("db.schema.ready")
 
 
 async def close_pool(pool: asyncpg.Pool | None) -> None:
+    """Close the pool if present (no-op for ``None``)."""
     if pool is not None:
         await pool.close()
