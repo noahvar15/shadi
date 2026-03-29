@@ -18,6 +18,18 @@ def test_worker_settings_exposes_pipeline_and_hooks() -> None:
     assert WorkerSettings.redis_settings is not None
 
 
+def test_worker_settings_dict_protocol_matches_lazy_snapshot() -> None:
+    """Regression: dict views must not be empty (arq / dict() / iteration)."""
+    from arq.worker import get_kwargs
+
+    m = dict(WorkerSettings)
+    assert bool(WorkerSettings)
+    assert len(WorkerSettings) == len(m)
+    assert set(m.keys()) == set(WorkerSettings.keys())
+    assert get_kwargs(WorkerSettings) == m
+    assert run_diagnostic_pipeline in m["functions"]
+
+
 @pytest.mark.asyncio
 async def test_worker_startup_stores_pool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@127.0.0.1:9/nope")
