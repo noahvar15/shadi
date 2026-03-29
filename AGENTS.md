@@ -2,6 +2,8 @@
 
 Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads patient data via FHIR R4, runs **four** LoRA domain specialists on one shared Meditron-70B load (plus separate non-LoRA agents for intake, optional imaging, evidence, orchestrator synthesis, and safety veto), and produces a ranked differential diagnosis before the physician walks in.
 
+**Wiring note:** `POST /cases` builds `CaseObject` from a FHIR bundle via the normalizer, not via `IntakeAgent`. `Orchestrator.run()` runs specialists → evidence → debate → synthesis → veto; **`IntakeAgent` and `ImageAnalysisAgent` are not called there yet** (see [README.md](README.md) *Wiring status*). Root [`config.py`](config.py) sets **`MOCK_LLM`** (default `true`).
+
 ---
 
 ## Architecture at a Glance
@@ -33,21 +35,25 @@ Only the four domain agents use LoRA on Meditron. The imaging agent is multimoda
 ```
 agents/
   base.py            # BaseAgent ABC — all agents inherit this
-  intake/            # SNOMED/LOINC/RxNorm extraction → CaseObject
+  intake/            # IntakeAgent (Qwen) — not wired to POST /cases yet
   specialists/       # Four LoRA domains + image_agent.py (MedGemma — not LoRA)
   evidence/          # PubMed + guidelines cross-reference
   safety/            # Safety veto (contraindications, allergies, meds)
   orchestrator/      # Fan-out, A2A debate, consensus synthesis
 shadi_fhir/          # FHIR R4 normalizer (`fhir.resources` is the HL7 lib — avoid a top-level `fhir` pkg)
 a2a/                 # A2A protocol schema + ENDORSE/CHALLENGE/MODIFY logic
-models/              # vLLM engine wrapper + LoRA adapter management
-api/                 # FastAPI app (routes, schemas, middleware)
+api/                 # FastAPI app (routes, schemas, middleware; POST /fhir/notify)
+tasks/               # arq worker + diagnostic pipeline job
+tools/mock_ehr/      # Local mock EHR (OAuth + Subscription + rest-hook demos)
 dashboard/           # Next.js physician dashboard (bun)
 docs/decisions/      # Architecture Decision Records — read before changing arch
 tests/
-  fixtures/          # De-identified MIMIC-IV sample cases
+  fixtures/          # Bundles and JSON fixtures for tests
   unit/
-skills/              # Shared agent skills — see Skills section below
+skills/              # Primary copy of shared skills (see Skills section)
+.agents/skills/      # Extended mirror (e.g. browser-automation); same SKILL.md layout
+config.py            # MOCK_LLM, OLLAMA_BASE_URL, VLLM_BASE_URL for agents
+docker-compose.yml   # vLLM LoRA modules, Ollama, api, worker, postgres, redis
 ```
 
 ---
@@ -99,9 +105,9 @@ pytest tests/
 
 ## Skills
 
-Project-level skills live in `skills/`. They are tracked in git and shared across the team. When a task matches a skill, read the `SKILL.md` and follow it.
+**Layout:** The **canonical** checked-in skills used with Vercel `find-skills` live under **`skills/`** (each skill is a folder with `SKILL.md`). **`skills-lock.json`** pins hashes for a subset of upstream sources (see that file for which). **`.agents/skills/`** mirrors the same layout and adds a few extra skills (for example `browser-automation`) that are not duplicated under `skills/`. Prefer reading `SKILL.md` from `skills/<name>/` when both exist.
 
-Only list skills in this file if they are actually tracked in this repository. Do not point agents at user-home-only skills or editor-specific symlink farms.
+Only list skills in the table below if they are tracked in this repository. Do not point agents at user-home-only skills or editor-specific symlink farms.
 
 Repo-shared Cursor context lives in `.cursor/rules/` and `.cursor/agents/`. Prefer those tracked files over user-home copies such as `~/.cursor/agents/`.
 
@@ -151,7 +157,7 @@ Agents communicate via structured messages in `a2a/`. Valid message types: `ENDO
 ## Learned Workspace Facts
 
 - Subagent model routing: `planner` → `claude-4.6-sonnet-medium-thinking` (strategic decomposition); `worker` → `gpt-5.4-medium` (Python agents, FHIR, A2A, API, models, infra — never `dashboard/`); `ui-engineer` → `claude-sonnet-4-6` (all work inside `dashboard/` exclusively); `reviewer` → `claude-opus-4-6` (verification and code review).
-- Project-level skills for team sharing live in `.agents/skills/` (committed to git). `.cursor/` is gitignored. `.claude/skills/` is not used — the team does not use Claude.
+- Shared skills: primary tree is **`skills/`**; **`.agents/skills/`** holds an extended mirror — see **Skills** above. `.cursor/` is gitignored. `.claude/skills/` is not used — the team does not use Claude.
 - Dashboard design system (defined in `tailwind.config.ts` on the scaffold branch, inherited by all downstream issues): Vercel/Linear aesthetic; Tailwind `darkMode: 'class'`; slate-950/white base; emerald-400/500 primary accent (high confidence, CTAs); red-500/600 safety veto/danger; amber-400/500 warnings/divergent agents; monospace for clinical scores and numbers, sans-serif for prose.
 - Dashboard routing (established in issue #69, which superseded #42/#43/#44): `/` = role-selection landing (Nurse vs Doctor); `/nurse` = triage intake form (chief complaint → `POST /cases`); `/doctor` = cases list with report cards and live agent progress.
 - Next.js hydration rule: never nest the layout shell (`<div>`, `<aside>`, `<header>`) inside a `'use client'` Providers component — only wrap `{children}` with QueryClientProvider/providers to avoid RSC serialization mismatches in Next.js 15 + React 19.

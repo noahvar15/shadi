@@ -1,6 +1,6 @@
 # Cross-Track Dependencies
 
-**Last updated:** 2026-03-28 (local FHIR simulator plan added)
+**Last updated:** 2026-03-29 (mock EHR stub delivered in-repo; README wiring status)
 
 This document maps every dependency between the four parallel development tracks so contributors know what they are waiting on, what they are blocking, and how to stay unblocked while those dependencies resolve.
 
@@ -112,20 +112,22 @@ These are the moments when two tracks need to sync:
 
 ---
 
-## Planned: Local FHIR or EHR stub (#25)
+## Local FHIR or EHR stub (#25)
 
 **Owner:** Noah (FHIR / EHR track). **Coordinate with** Emmanuel if the solution is wired into `docker-compose.yml` (new service, compose profile, or healthchecks).
 
 **Why:** Unit tests and fixtures (`tests/fixtures/sample_bundle.json`, `tests/unit/test_fhir_webhook.py`) already cover **bundle → `CaseObject`** and **signed `POST /fhir/notify`**. They do **not** replace a live target for **OAuth2 client credentials** (#26), **`POST /Subscription`** on a real FHIR REST API, or an EHR-driven **rest-hook** round trip (#27). Vendor sandboxes (Epic, Cerner) are optional; the team still needs a **reproducible local or CI** target to demo and regression-test that slice.
 
-**Plan — implement at least one of:**
+**Delivered — minimal in-repo stub:** Run **`python -m tools.mock_ehr`** from the repo root (default `http://127.0.0.1:9001`). It implements `POST /oauth/token` (client credentials), `POST` / `DELETE /Subscription`, and `POST /$demo/simulate-arrived-encounter` to POST a triage bundle to Shadi’s **`POST /fhir/notify`**. See [`tools/mock_ehr/README.md`](../tools/mock_ehr/README.md) and **Mock EHR (issue #70)** in `.env.example`. This satisfies option (2) below; it is **not** added to default `docker compose up`.
+
+**Still optional — implement at least one of:**
 
 1. **Reference FHIR server in Docker** — e.g. [HAPI FHIR](https://hapifhir.io/) (R4-capable JPA server) or another maintained R4 image. Prefer an **optional** Compose profile (e.g. `docker compose --profile fhir up`) so default `docker compose up` stays unchanged for tracks that only need agents + API stubs. Document how dev credentials map to `FHIR_BASE_URL`, `FHIR_TOKEN_URL`, `FHIR_CLIENT_ID`, and `FHIR_CLIENT_SECRET`.
-2. **Minimal in-repo stub** — a small HTTP service (or scripted pytest + `httpx` ASGI test app) that implements **only** the endpoints Shadi calls today (token endpoint, `POST` / `DELETE Subscription`) and can **POST** a signed notification body to `NOTIFICATION_ENDPOINT` for demos or CI. Useful when a full FHIR server is too heavy for a given environment.
+2. **Minimal in-repo stub** — **Done:** `tools/mock_ehr` (see above).
 
 **Explicitly not required** for: agent development (`MOCK_LLM`), `bundle_to_case` correctness, dashboard report UI (static fixtures / MSW), or `POST /cases` with a pasted bundle.
 
-**Success criteria:** A new contributor can follow README + `.env.example` to run **either** (a) reference server + Shadi MCP enabled, or (b) stub + Shadi, and observe **subscription registration** and **at least one** inbound notify → normalize → enqueue path without Epic/Cerner credentials.
+**Success criteria:** A new contributor can follow README + `.env.example` to run **either** (a) reference server + Shadi MCP enabled, or **(b) `tools/mock_ehr` + Shadi**, and observe **subscription registration** and **at least one** inbound notify → normalize → enqueue path without Epic/Cerner credentials. Path (b) is available today using the mock EHR and a locally running Shadi API.
 
 ---
 
@@ -134,7 +136,7 @@ These are the moments when two tracks need to sync:
 Each track owner can begin these tasks immediately with zero cross-track dependencies:
 
 - **Noah**: implement `FHIRNormalizer.bundle_to_case()` (#28) — pure Python, no services required
-- **Noah** (when #26 / #27 are in scope): add **local FHIR reference server or minimal EHR stub** (see **Planned: Local FHIR or EHR stub (#25)** below) — not a day-one blocker for agents or fixture-based tests
+- **Noah** (when #26 / #27 are in scope): use **`tools/mock_ehr`** for demos, or add **Dockerized HAPI** (or similar) if the team needs a full R4 server in Compose — see **Local FHIR or EHR stub (#25)** below — not a day-one blocker for agents or fixture-based tests
 - **Emmanuel**: add `router = APIRouter()` to `api/routes/cases.py` and `api/routes/reports.py` to fix the startup import crash, then wire the lifespan (#31)
 - **Joshua**: implement the agent pipeline (#36) — intake, four LoRA specialists, optional imaging, evidence, orchestrator wiring, safety veto — each as `BaseAgent` subclasses with `inference_url` and `model` per ADR-002
 - **Ericsen**: run `bunx create-next-app` and scaffold the app (#41) — zero dependencies
