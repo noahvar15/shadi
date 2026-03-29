@@ -90,3 +90,36 @@ app.include_router(fhir_routes.router, prefix="/fhir", tags=["fhir"])
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def health_ready() -> dict:
+    """Deep readiness probe — verifies Postgres and Redis connectivity."""
+    checks: dict[str, str] = {}
+    pool = getattr(app.state, "pool", None)
+    if pool is not None:
+        try:
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            checks["postgres"] = "ok"
+        except Exception as exc:
+            checks["postgres"] = f"error: {exc}"
+    else:
+        checks["postgres"] = "no pool"
+
+    arq_redis = getattr(app.state, "arq_redis", None)
+    if arq_redis is not None:
+        try:
+            await arq_redis.ping()
+            checks["redis"] = "ok"
+        except Exception as exc:
+            checks["redis"] = f"error: {exc}"
+    else:
+        checks["redis"] = "no connection"
+
+    all_ok = all(v == "ok" for v in checks.values())
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        content={"status": "ready" if all_ok else "degraded", "checks": checks},
+        status_code=200 if all_ok else 503,
+    )

@@ -6,11 +6,13 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
+COPY config.py ./
 COPY agents ./agents
 COPY a2a ./a2a
 COPY api ./api
 COPY shadi_fhir ./shadi_fhir
 COPY tasks ./tasks
+COPY tools ./tools
 COPY pyproject.toml README.md ./
 
 RUN pip install --no-cache-dir --upgrade pip \

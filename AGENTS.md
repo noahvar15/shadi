@@ -2,7 +2,7 @@
 
 Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads patient data via FHIR R4, runs **four** specialist agents over a shared **Meditron** model on Ollama (`MEDITRON_MODEL`, default `meditron:70b`; domain-specific prompts per ADR-004), plus separate agents for intake, optional imaging, evidence, orchestrator synthesis, and safety veto — producing a ranked differential diagnosis before the physician walks in. Optional vLLM+LoRA exists as a Compose profile only (ADR-003).
 
-**Wiring note:** `POST /cases` builds `CaseObject` from a FHIR bundle via the normalizer, not via `IntakeAgent`. `Orchestrator.run()` runs specialists → evidence → debate → synthesis → veto; **`IntakeAgent` and `ImageAnalysisAgent` are not called there yet** (see [README.md](README.md) *Wiring status*). Root [`config.py`](config.py) sets **`MOCK_LLM`** (default `true`).
+**Wiring note:** `POST /cases` builds `CaseObject` from a FHIR bundle via the normalizer, not via `IntakeAgent`. `Orchestrator.run()` runs intake → imaging → specialists → evidence → debate → synthesis → safety veto. Both `IntakeAgent` and `ImageAnalysisAgent` are wired in `orchestrator.py`. Root [`config.py`](config.py) sets **`MOCK_LLM`** (default `true`).
 
 ---
 
@@ -35,7 +35,7 @@ Specialists share **Meditron** via Ollama (`MEDITRON_MODEL`, default `meditron:7
 ```
 agents/
   base.py            # BaseAgent ABC — all agents inherit this
-  intake/            # IntakeAgent (Qwen) — not wired to POST /cases yet
+  intake/            # IntakeAgent (Qwen) — wired as Stage 0 in Orchestrator.run()
   specialists/       # Four LoRA domains + image_agent.py (MedGemma — not LoRA)
   evidence/          # PubMed + guidelines cross-reference
   safety/            # Safety veto (contraindications, allergies, meds)

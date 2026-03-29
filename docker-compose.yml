@@ -95,6 +95,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://shadi:shadi@postgres:5432/shadi
       - REDIS_URL=redis://redis:6379/0
       - API_SECRET_KEY=${API_SECRET_KEY:-change-me-before-production}
+      - MOCK_LLM=${MOCK_LLM:-true}
       - OLLAMA_BASE_URL=http://ollama:11434/v1
       # Model assignments — see ADR-002, ADR-004
       - MEDITRON_MODEL=${MEDITRON_MODEL:-meditron:70b}
@@ -137,6 +138,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://shadi:shadi@postgres:5432/shadi
       - REDIS_URL=redis://redis:6379/0
       - API_SECRET_KEY=${API_SECRET_KEY:-dev-local-only-set-a-long-random-secret}
+      - MOCK_LLM=${MOCK_LLM:-true}
       - INTAKE_QUEUE=${INTAKE_QUEUE:-arq:intake}
       - OLLAMA_BASE_URL=http://ollama:11434/v1
       - MEDITRON_MODEL=${MEDITRON_MODEL:-meditron:70b}
@@ -152,6 +154,12 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import tasks.worker'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
   # ─── Physician Dashboard ─────────────────────────────────────────────────────

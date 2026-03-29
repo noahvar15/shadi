@@ -3,7 +3,7 @@ import type { DifferentialReport } from '@/types/report'
 
 let caseCounter = 1000
 
-const PIPELINE_STEPS = ['specialists', 'evidence', 'debate', 'synthesis', 'safety'] as const
+const PIPELINE_STEPS = ['intake', 'imaging', 'specialists', 'evidence', 'debate', 'synthesis', 'safety'] as const
 const PIPELINE_DURATION_MS = 12_000
 
 interface PipelineState {
@@ -164,11 +164,12 @@ export const handlers = [
   http.post('/api/cases', async ({ request }) => {
     const body = await request.json() as Record<string, unknown>
     const caseId = `CASE-${Date.now()}-${caseCounter++}`
+    pipelineStates.set(caseId, { startedAt: Date.now() })
     MOCK_CASES.unshift({
       case_id: caseId,
       patient_id: String(body.patient_stub_id ?? 'STUB'),
       patient_name: String(body.patient_name ?? 'Unknown Patient'),
-      status: 'queued',
+      status: 'processing',
       created_at: new Date().toISOString(),
       chief_complaint: String(body.chief_complaint ?? ''),
     })
