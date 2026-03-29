@@ -123,7 +123,13 @@ def test_get_report_not_ready(api_client) -> None:
     client, mock_conn, _mock_arq = api_client
     cid = uuid4()
     mock_conn.fetchrow = AsyncMock(
-        return_value={"status": "queued", "report_json": None},
+        return_value={
+            "status": "queued",
+            "report_json": None,
+            "updated_at": None,
+            "error_message": None,
+            "pipeline_step": None,
+        },
     )
     r = client.get(f"/reports/{cid}")
     assert r.status_code == 200
@@ -132,6 +138,8 @@ def test_get_report_not_ready(api_client) -> None:
 
 
 def test_get_report_ready(api_client) -> None:
+    from datetime import datetime, UTC
+
     client, mock_conn, _mock_arq = api_client
     cid = uuid4()
     payload = {
@@ -144,10 +152,17 @@ def test_get_report_ready(api_client) -> None:
         "fhir_diagnostic_report_id": None,
     }
     mock_conn.fetchrow = AsyncMock(
-        return_value={"status": "complete", "report_json": payload},
+        return_value={
+            "status": "complete",
+            "report_json": payload,
+            "updated_at": datetime.now(UTC),
+            "error_message": None,
+            "pipeline_step": None,
+        },
     )
     r = client.get(f"/reports/{cid}")
     assert r.status_code == 200
     data = r.json()
     assert data["case_id"] == str(cid)
     assert data["consensus_level"] == 0.0
+    assert data["completed_at"] is not None
