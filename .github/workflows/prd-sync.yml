@@ -45,4 +45,6 @@ jobs:
           fi
           git add docs/PRD.md
           git commit -m "chore(docs): sync PRD checkboxes (PR #${{ github.event.pull_request.number }})"
-          git push origin HEAD:main
+          git fetch origin main
+          git rebase origin/main
+          git push --force-with-lease origin HEAD:main

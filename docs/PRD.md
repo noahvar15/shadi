@@ -6,7 +6,7 @@ Checkboxes below are updated **automatically** when a PR merges to `main` **if**
 PRD: FE-001, API-002
 ```
 
-Use comma or space separated IDs. IDs must match the `<!-- prd:... -->` markers on each line.
+Use comma- or space-separated IDs. IDs must match the `<!-- prd:... -->` markers on each line.
 
 ---
 
