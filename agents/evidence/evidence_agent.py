@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     import asyncpg as asyncpg_t
 
 from agents._llm import call_chat
+from agents.vllm_openai_ids import claim_eval_chat_model
 from agents.base import BaseAgent
 from agents.schemas import (
     CaseObject,
@@ -278,7 +279,7 @@ class EvidenceAgent(BaseAgent[EvidenceResult]):
         ]
         raw = await call_chat(
             settings.VLLM_BASE_URL,
-            "meditron:70b",
+            claim_eval_chat_model(),
             messages,
             response_format={"type": "json_object"},
             mock_domain=self.domain,

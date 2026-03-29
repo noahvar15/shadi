@@ -139,13 +139,137 @@ Services:
 - `http://localhost:8080` — vLLM inference server (meditron:70b + LoRA)
 - `http://localhost:11434` — Ollama inference server (all other models)
 
-### Development
+### vLLM without LoRA adapters (development)
+
+The default Compose file starts vLLM with four LoRA module paths. If those directories are missing, use the merge file from [ADR-003](docs/decisions/adr-003-vllm-base-only-development.md):
 
 ```bash
-# Python backend
-pip install -e ".[dev]"
-uvicorn api.main:app --reload
+docker compose -f docker-compose.yml -f docker-compose.vllm-base.yml up -d vllm
+```
 
+After the server is healthy, discover the OpenAI model id and set it in `.env`:
+
+```bash
+curl -s http://localhost:8080/v1/models
+```
+
+Set `VLLM_SPECIALIST_MODEL` and `VLLM_CLAIM_EVAL_MODEL` to that id (often the same string vLLM lists for the loaded checkpoint). Specialists still use domain-specific prompts; only the served weights are shared.
+
+To confirm LoRA layout before using the default vLLM service:
+
+```bash
+chmod +x scripts/verify_lora_adapters.sh
+./scripts/verify_lora_adapters.sh
+```
+
+**`verify_lora_adapters.sh` exits 0 only when the layout is valid; otherwise it exits 1.** Until then, pick one:
+
+1. **Full LoRA** — Set `LORA_ADAPTERS_PATH` in `.env` to a directory that contains `cardiology/`, `neurology/`, `pulmonology/`, and `toxicology/` with real adapter checkpoints (create that tree or reuse an existing one).
+2. **No LoRA yet** — Use `docker-compose.vllm-base.yml`, set `VLLM_SPECIALIST_MODEL` and `VLLM_CLAIM_EVAL_MODEL` from `GET /v1/models` ([ADR-003](docs/decisions/adr-003-vllm-base-only-development.md)); do not rely on default Compose `vllm` `--lora-modules` until adapters exist.
+
+### Full case output (Docker Compose — real models + DB)
+
+Use this when you want **vLLM, Ollama, Postgres, Redis, API, and the arq worker** all running and a **complete diagnostic report** (not `MOCK_LLM`).
+
+**1. Configure `.env` (from `.env.example`)**
+
+- Set **`MOCK_LLM=false`** so the API/worker call real inference.
+- Set **`MODEL_BASE_PATH`** and **`LORA_ADAPTERS_PATH`** to your Meditron base weights and four LoRA dirs (or use [ADR-003](docs/decisions/adr-003-vllm-base-only-development.md) base-only Compose + `VLLM_SPECIALIST_MODEL` / `VLLM_CLAIM_EVAL_MODEL`).
+- Set a real **`API_SECRET_KEY`** (not a placeholder).
+- Ensure **`EVIDENCE_INDEX_PATH`** on the host exists and points at your evidence index (Compose mounts it read-only into the API). Create an empty directory if you only need the stack to start; evidence quality depends on a real index.
+- Leave **`DATABASE_URL`** in `.env` as localhost for host-side tools; **Compose overrides** `DATABASE_URL`, `VLLM_BASE_URL`, and `OLLAMA_BASE_URL` inside `api` / `worker` automatically.
+
+**2. LoRA layout (skip if using `docker-compose.vllm-base.yml`)**
+
+```bash
+./scripts/verify_lora_adapters.sh
+```
+
+**3. Start the stack**
+
+```bash
+docker compose up -d
+```
+
+Wait until `postgres`, `redis`, `vllm`, `ollama`, `api`, and `worker` are healthy (`docker compose ps`).
+
+**4. Pull Ollama models (first time only)**
+
+```bash
+docker compose exec ollama ollama pull alibayram/medgemma:27b
+docker compose exec ollama ollama pull qwen2.5:7b
+docker compose exec ollama ollama pull nomic-embed-text
+docker compose exec ollama ollama pull phi4:14b
+docker compose exec ollama ollama pull deepseek-r1:32b
+```
+
+**5. Smoke-check inference**
+
+```bash
+curl -sf http://localhost:8080/health
+curl -sf http://localhost:11434/api/tags
+curl -sf http://localhost:8000/health
+```
+
+**6. Enqueue a case and read the report**
+
+Full **`CaseObject` from FHIR** (requires a valid bundle for your normalizer), or temporarily **`SHADI_STUB_CASE_INTAKE=1`** in `.env` with any JSON body for a stub case (restart `api` + `worker` after changing `.env`).
+
+```bash
+# Example: POST a bundle (adjust path if not run from repo root)
+RESP=$(curl -s -X POST http://localhost:8000/cases \
+  -H "Content-Type: application/json" \
+  -d @tests/fixtures/sample_bundle.json)
+echo "$RESP"
+CASE_ID=$(echo "$RESP" | python3 -c "import sys, json; print(json.load(sys.stdin)['case_id'])")
+
+# Poll until complete (pipeline runs in the worker)
+while true; do
+  STATUS=$(curl -s "http://localhost:8000/reports/${CASE_ID}/status" | python3 -c "import sys, json; print(json.load(sys.stdin).get('status',''))")
+  echo "status=$STATUS"
+  [ "$STATUS" = "complete" ] && break
+  sleep 3
+done
+
+curl -s "http://localhost:8000/reports/${CASE_ID}" | python3 -m json.tool
+```
+
+If `sample_bundle.json` returns **422**, the normalizer rejected it — use a bundle that matches `CaseObject.from_fhir_bundle` or enable **`SHADI_STUB_CASE_INTAKE=1`** for an end-to-end wiring check.
+
+**7. Optional: live orchestrator on the host (same models as `.env`)**
+
+Requires **Postgres and inference reachable from the host** (`localhost:5432`, `8080`, `11434`) and **`.venv`** with the package installed:
+
+```bash
+export MOCK_LLM=false
+.venv/bin/python tests/integration/run_live_cli.py
+```
+
+### Development
+
+Many Linux images ship **`python3`** only (no `python` on `PATH`). Use **`python3`** and a project venv so `pytest` and Shadi share one interpreter:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+
+# Tests (works without activating the venv)
+./scripts/run_tests.sh
+# Or: .venv/bin/python -m pytest tests/ -q
+
+# Multi-agent CLI demo (mock LLM; no vLLM/Ollama). With a repo ``.venv``,
+# ``python3 -m tools.shadi_run_case_cli`` re-runs under ``.venv/bin/python``.
+python3 -m tools.shadi_run_case_cli
+
+# Same pipeline against **real** vLLM + Ollama (``MOCK_LLM=false`` in a subprocess only;
+# slow, requires models up — see ADR-002):
+# .venv/bin/python -m pytest tests/integration/test_shadi_live_cli_output.py --live-inference -s
+
+# API locally
+.venv/bin/uvicorn api.main:app --reload
+```
+
+```bash
 # Dashboard
 cd dashboard
 bun install
@@ -184,6 +308,7 @@ shadi/
 |---|---|
 | [ADR-001](docs/decisions/adr-001-architecture.md) | LoRA adapter strategy, A2A protocol design, air-gap rationale |
 | [ADR-002](docs/decisions/adr-002-model-assignments.md) | Ollama model assignments per agent, two-server strategy, memory budget |
+| [ADR-003](docs/decisions/adr-003-vllm-base-only-development.md) | Optional base-only vLLM Compose merge + env overrides when LoRAs are absent |
 
 ---
 

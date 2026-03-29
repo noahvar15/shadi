@@ -17,6 +17,7 @@ import json
 
 from agents._llm import call_chat
 from agents.base import BaseAgent
+from agents.vllm_openai_ids import specialist_chat_model
 from agents.schemas import CaseObject, DiagnosisCandidate, SpecialistResult
 from config import settings
 
@@ -93,7 +94,7 @@ class ToxicologyAgent(BaseAgent[SpecialistResult]):
 
         raw = await call_chat(
             self.inference_url,
-            self.model,
+            specialist_chat_model(self.model),
             messages,
             mock_domain=self.domain,
         )

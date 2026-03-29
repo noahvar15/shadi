@@ -11,12 +11,24 @@ import pytest
 from starlette.testclient import TestClient
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--live-inference",
+        action="store_true",
+        default=False,
+        help="Run live orchestrator integration test (real vLLM/Ollama; MOCK_LLM=false).",
+    )
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Defaults for CI / bare shells so ``get_settings()`` succeeds when tests run without ``.env``.
 
-    Uses ``setdefault`` only: a real ``.env`` or exported vars still win. Tests that hit the DB
-    must mock ``init_pool`` / use ``TestClient`` patches like ``patched_api_app``.
+    ``MOCK_LLM`` and ``INTAKE_QUEUE`` are **forced** (not setdefault): a developer ``.env`` with
+    ``MOCK_LLM=false`` or a custom queue must not make unit tests hit real vLLM/Ollama/Postgres.
+    ``DATABASE_URL`` / ``API_SECRET_KEY`` still use setdefault so explicit CI env can override.
     """
+    os.environ["MOCK_LLM"] = "true"
+    os.environ["INTAKE_QUEUE"] = "arq:intake"
     os.environ.setdefault(
         "DATABASE_URL",
         "postgresql+asyncpg://pytest:pytest@127.0.0.1:5432/pytest",

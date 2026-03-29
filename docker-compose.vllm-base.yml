@@ -1,0 +1,14 @@
+# Merge with: docker compose -f docker-compose.yml -f docker-compose.vllm-base.yml up
+# Serves Meditron base only (no LoRA). Set VLLM_SPECIALIST_MODEL and
+# VLLM_CLAIM_EVAL_MODEL in .env to the model id returned by GET /v1/models.
+# See docs/decisions/adr-003-vllm-base-only-development.md
+
+services:
+  vllm:
+    volumes:
+      - ${MODEL_BASE_PATH:-/models/meditron-70b}:/models/base:ro
+    command: >
+      --model /models/base
+      --quantization fp4
+      --max-model-len 8192
+      --port 8080

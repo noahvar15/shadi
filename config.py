@@ -11,6 +11,9 @@ Mock mode
 Set ``MOCK_LLM=true`` (the default) to bypass real inference calls during
 local development. Flip to ``false`` when running on the DGX with models
 downloaded. See ``agents/_llm.py`` for the implementation.
+
+For vLLM without LoRA checkpoints, use ``docker-compose.vllm-base.yml`` and set
+``VLLM_SPECIALIST_MODEL`` / ``VLLM_CLAIM_EVAL_MODEL`` (see ADR-003).
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,6 +25,9 @@ class Settings(BaseSettings):
     # ── Inference servers ──────────────────────────────────────────────────
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
     VLLM_BASE_URL: str = "http://localhost:8080/v1"
+    # Base-only vLLM (docker-compose.vllm-base.yml): set to the id from GET /v1/models
+    VLLM_SPECIALIST_MODEL: str = ""
+    VLLM_CLAIM_EVAL_MODEL: str = ""
 
     # ── Database ───────────────────────────────────────────────────────────
     # SQLAlchemy-style DSN (used by SQLAlchemy ORM and the API layer).
