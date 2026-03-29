@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from shadi_fhir.mcp_server import FHIRMCPServer
+if TYPE_CHECKING:
+    from shadi_fhir.mcp_server import FHIRMCPServer
 
 _PLACEHOLDER_API_SECRETS = frozenset(
     {
@@ -26,7 +28,9 @@ _PLACEHOLDER_API_SECRETS = frozenset(
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Try .env first (git-ignored personal override), then fall back to the
+        # committed .env.demo so teammates can run the stack without any manual cp.
+        env_file=[".env", ".env.demo"],
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -43,6 +47,7 @@ class Settings(BaseSettings):
     api_secret_key: str = Field(..., validation_alias="API_SECRET_KEY")
     # DEP-1 (cross-track-dependencies): use until Noah #28 contract is merged in your fork
     stub_case_intake: bool = Field(default=False, validation_alias="SHADI_STUB_CASE_INTAKE")
+    stub_patient_search: bool = Field(default=False, validation_alias="SHADI_STUB_PATIENT_SEARCH")
 
     @field_validator("api_secret_key", mode="after")
     @classmethod
@@ -61,6 +66,16 @@ class Settings(BaseSettings):
         default="",
         validation_alias="NOTIFICATION_ENDPOINT",
     )
+    fhir_webhook_secret: str = Field(default="", validation_alias="FHIR_WEBHOOK_SECRET")
+
+    @field_validator("fhir_webhook_secret", mode="after")
+    @classmethod
+    def fhir_webhook_secret_not_placeholder(cls, v: str) -> str:
+        t = v.strip().lower()
+        if t and t in _PLACEHOLDER_API_SECRETS:
+            msg = "FHIR_WEBHOOK_SECRET must not be a placeholder or weak default (same rules as API_SECRET_KEY)."
+            raise ValueError(msg)
+        return v
 
     @property
     def fhir_mcp_enabled(self) -> bool:
@@ -70,10 +85,13 @@ class Settings(BaseSettings):
             and self.fhir_client_secret.strip()
             and self.fhir_token_url.strip()
             and self.notification_endpoint.strip()
+            and self.fhir_webhook_secret.strip()
         )
 
 
 def build_fhir_mcp_server(settings: Settings) -> FHIRMCPServer:
+    from shadi_fhir.mcp_server import FHIRMCPServer
+
     return FHIRMCPServer(
         settings.fhir_base_url,
         settings.fhir_client_id,

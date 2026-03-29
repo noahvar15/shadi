@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.config import build_fhir_mcp_server, get_settings
 from api.db import close_pool, init_pool
-from api.routes import cases, fhir_routes, reports
+from api.routes import cases, fhir_routes, patients, reports
 
 logger = structlog.get_logger()
 
@@ -80,6 +80,7 @@ app.add_middleware(
 )
 
 app.include_router(cases.router, prefix="/cases", tags=["cases"])
+app.include_router(patients.router, prefix="/patients", tags=["patients"])
 app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(fhir_routes.router, prefix="/fhir", tags=["fhir"])
 

@@ -107,6 +107,13 @@ async def ensure_schema(pool: asyncpg.Pool) -> None:
               EXECUTE FUNCTION shadi_touch_cases_updated_at();
         """)
 
+        # Feedback columns for doctor thumbs-up / thumbs-down (POST /cases/:id/feedback).
+        await conn.execute("""
+            ALTER TABLE public.cases
+            ADD COLUMN IF NOT EXISTS feedback VARCHAR(8),
+            ADD COLUMN IF NOT EXISTS feedback_note TEXT;
+        """)
+
     logger.info("db.schema.ready")
 
 

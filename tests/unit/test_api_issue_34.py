@@ -34,6 +34,7 @@ def test_worker_settings_dict_protocol_matches_lazy_snapshot() -> None:
 async def test_worker_startup_stores_pool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@127.0.0.1:9/nope")
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:9/0")
+    monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-for-pytest")
 
     from api.config import get_settings
 

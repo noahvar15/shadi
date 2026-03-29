@@ -1,26 +1,32 @@
 # Shadi — Agent Guide
 
-Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads patient data via FHIR R4, runs five specialist agents over a shared **Meditron** model on Ollama (domain-specific prompts), and produces a ranked differential diagnosis before the physician walks in. See ADR-004; optional vLLM+LoRA exists as a Compose profile only.
+Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads patient data via FHIR R4, runs **four** specialist agents over a shared **Meditron** model on Ollama (`MEDITRON_MODEL`, default `meditron:70b`; domain-specific prompts per ADR-004), plus separate agents for intake, optional imaging, evidence, orchestrator synthesis, and safety veto — producing a ranked differential diagnosis before the physician walks in. Optional vLLM+LoRA exists as a Compose profile only (ADR-003).
+
+**Wiring note:** `POST /cases` builds `CaseObject` from a FHIR bundle via the normalizer, not via `IntakeAgent`. `Orchestrator.run()` runs specialists → evidence → debate → synthesis → veto; **`IntakeAgent` and `ImageAnalysisAgent` are not called there yet** (see [README.md](README.md) *Wiring status*). Root [`config.py`](config.py) sets **`MOCK_LLM`** (default `true`).
 
 ---
 
 ## Architecture at a Glance
 
+**Inference split (ADR-002, ADR-004):** Ollama serves **all** agent chat and embeddings, including **`MEDITRON_MODEL`** for the four specialists and evidence claim evaluation. Intake (Qwen), imaging (MedGemma), safety (Phi), and orchestrator synthesis (DeepSeek-R1) are also on Ollama. Optional **vLLM + LoRA** is a Compose **`vllm-lora`** profile for experiments — default agents do not call it. No cloud APIs — PHI stays on the machine.
+
 ```
 EHR → FHIR MCP Server → Intake Agent → CaseObject
-                                             ↓
-                          Cardiology / Neurology / Pulmonology / Toxicology (parallel)
-                                             ↓
-                               Evidence Grounding Agent
-                                             ↓
-                                    A2A Debate Round
-                                             ↓
-                               Orchestrator → Safety Veto
-                                             ↓
-                           DiagnosticReport (FHIR) + Dashboard
+                          │    │
+                          │    └──→ Imaging Agent (MedGemma, only if attachments)
+                          ↓
+          Four specialists: Cardiology / Neurology / Pulmonology / Toxicology (parallel, Ollama Meditron)
+                          ↓
+                    Evidence Grounding Agent
+                          ↓
+                       A2A Debate Round
+                          ↓
+               Orchestrator (synthesis) → Safety Veto
+                          ↓
+              DiagnosticReport (FHIR) + Dashboard
 ```
 
-Specialists share **Meditron** via Ollama (`MEDITRON_MODEL`, default `meditron:70b`). Other agents use additional Ollama models. No cloud APIs — PHI stays on the machine.
+Specialists share **Meditron** via Ollama (`MEDITRON_MODEL`, default `meditron:70b`); differentiation is by prompt and domain metadata, not separate weight loads. The imaging agent is multimodal (MedGemma on Ollama), not a fifth specialist adapter. Optional per-domain LoRA on vLLM is profile-only (ADR-003).
 
 ---
 
@@ -29,21 +35,25 @@ Specialists share **Meditron** via Ollama (`MEDITRON_MODEL`, default `meditron:7
 ```
 agents/
   base.py            # BaseAgent ABC — all agents inherit this
-  intake/            # SNOMED/LOINC/RxNorm extraction → CaseObject
-  specialists/       # Cardiology, neurology, pulmonology, toxicology
+  intake/            # IntakeAgent (Qwen) — not wired to POST /cases yet
+  specialists/       # Four LoRA domains + image_agent.py (MedGemma — not LoRA)
   evidence/          # PubMed + guidelines cross-reference
   safety/            # Safety veto (contraindications, allergies, meds)
   orchestrator/      # Fan-out, A2A debate, consensus synthesis
 shadi_fhir/          # FHIR R4 normalizer (`fhir.resources` is the HL7 lib — avoid a top-level `fhir` pkg)
 a2a/                 # A2A protocol schema + ENDORSE/CHALLENGE/MODIFY logic
-models/              # vLLM engine wrapper + LoRA adapter management
-api/                 # FastAPI app (routes, schemas, middleware)
+api/                 # FastAPI app (routes, schemas, middleware; POST /fhir/notify)
+tasks/               # arq worker + diagnostic pipeline job
+tools/mock_ehr/      # Local mock EHR (OAuth + Subscription + rest-hook demos)
 dashboard/           # Next.js physician dashboard (bun)
 docs/decisions/      # Architecture Decision Records — read before changing arch
 tests/
-  fixtures/          # De-identified MIMIC-IV sample cases
+  fixtures/          # Bundles and JSON fixtures for tests
   unit/
-skills/              # Shared agent skills — see Skills section below
+skills/              # Primary copy of shared skills (see Skills section)
+.agents/skills/      # Extended mirror (e.g. browser-automation); same SKILL.md layout
+config.py            # MOCK_LLM, OLLAMA_BASE_URL, VLLM_BASE_URL for agents
+docker-compose.yml   # vLLM LoRA modules, Ollama, api, worker, postgres, redis
 ```
 
 ---
@@ -54,8 +64,8 @@ skills/              # Shared agent skills — see Skills section below
 |---|---|
 | Python runtime | 3.11+ |
 | Web framework | FastAPI + Uvicorn |
-| Inference | vLLM 0.6+, LoRA via `--enable-lora` |
-| Models | Meditron-70B (FP4) base + 4 LoRA adapters |
+| Inference | Ollama (default agents); optional vLLM 0.6+ + LoRA (`vllm-lora` profile) |
+| Models | Shared `MEDITRON_MODEL` on Ollama for four specialists; other Ollama tags per ADR-002 / ADR-004 |
 | FHIR | `fhir.resources` 7.1+ |
 | Async task queue | Redis + arq |
 | Database | PostgreSQL via asyncpg + SQLAlchemy async |
@@ -95,9 +105,9 @@ pytest tests/
 
 ## Skills
 
-Project-level skills live in `skills/`. They are tracked in git and shared across the team. When a task matches a skill, read the `SKILL.md` and follow it.
+**Layout:** The **canonical** checked-in skills used with Vercel `find-skills` live under **`skills/`** (each skill is a folder with `SKILL.md`). **`skills-lock.json`** pins hashes for a subset of upstream sources (see that file for which). **`.agents/skills/`** mirrors the same layout and adds a few extra skills (for example `browser-automation`) that are not duplicated under `skills/`. Prefer reading `SKILL.md` from `skills/<name>/` when both exist.
 
-Only list skills in this file if they are actually tracked in this repository. Do not point agents at user-home-only skills or editor-specific symlink farms.
+Only list skills in the table below if they are tracked in this repository. Do not point agents at user-home-only skills or editor-specific symlink farms.
 
 Repo-shared Cursor context lives in `.cursor/rules/` and `.cursor/agents/`. Prefer those tracked files over user-home copies such as `~/.cursor/agents/`.
 
@@ -140,7 +150,7 @@ Agents communicate via structured messages in `a2a/`. Valid message types: `ENDO
 ## Learned User Preferences
 
 - Always use `bunx` instead of `npx` for all CLI tools in this project (e.g. `bunx skills add`, not `npx skills add`).
-- Each GitHub issue gets its own branch, git worktree (under `.worktrees/` — gitignored), and a separate PR; never bundle multiple issues into one branch.
+- Each GitHub issue gets its own branch and a separate PR; never bundle multiple issues into one branch. Worktrees are not used for normal feature work — only create one if the user explicitly requests isolation.
 
 ---
 
@@ -148,5 +158,19 @@ Agents communicate via structured messages in `a2a/`. Valid message types: `ENDO
 
 - Subagent model routing: `planner` → `claude-4.6-sonnet-medium-thinking` (strategic decomposition); `worker` → `gpt-5.4-medium` (Python agents, FHIR, A2A, API, models, infra — never `dashboard/`); `ui-engineer` → `claude-sonnet-4-6` (all work inside `dashboard/` exclusively); `reviewer` → `claude-opus-4-6` (verification and code review).
 - Project-level skills for team sharing live in `.agents/skills/` (committed to git). `.cursor/` is gitignored. `.claude/skills/` is not used — the team does not use Claude.
-- Dashboard design system (defined in `tailwind.config.ts` on the scaffold branch, inherited by all downstream issues): Vercel/Linear aesthetic; Tailwind `darkMode: 'class'`; slate-950/white base; emerald-400/500 primary accent (high confidence, CTAs); red-500/600 safety veto/danger; amber-400/500 warnings/divergent agents; monospace for clinical scores and numbers, sans-serif for prose.
-- Dashboard issue dependency order: #41 (scaffold) must merge before #42 (case intake) and #43 (report view); #43 must merge before #44 (live updates).
+- Dashboard design system (defined in `tailwind.config.ts` on the scaffold branch, inherited by all downstream issues): Vercel/Linear aesthetic; Tailwind `darkMode: 'class'`; light mode uses "Sage Whisper" palette (`--background: #F4F7F4`, `--surface: #FAFCFA`, `--border: #DCE6DB`, `--foreground: #161E15`, `--foreground-muted: #5B7258`) — green-family tokens chosen for harmony with the emerald accent; dark mode base slate-950; emerald-400/500 primary accent (high confidence, CTAs); red-500/600 safety veto/danger; amber-400/500 warnings/divergent agents; monospace for clinical scores and numbers, sans-serif for prose.
+- Dashboard routing (established in issue #69, which superseded #42/#43/#44): `/` = role-selection landing (Nurse vs Doctor); `/nurse` = triage intake form (chief complaint → `POST /cases/intake`); `/doctor` = cases list with report cards and live agent progress; `/doctor/notifications` = activity feed; `/cases/:id/triage` = formatted triage document.
+- Next.js hydration rule: never nest the layout shell (`<div>`, `<aside>`, `<header>`) inside a `'use client'` Providers component — only wrap `{children}` with QueryClientProvider/providers to avoid RSC serialization mismatches in Next.js 15 + React 19.
+- Nurse form `POST /cases/intake` payload fields: `chief_complaint`, `patient_name`, `patient_stub_id` (not `patient_id`); using `patient_id` is a silent wrong field name that won't error at compile time.
+- `consensus_level` in case/report data is a `float` (0.0–1.0), not a string label like `'high'`; mock handlers and type stubs must use a number.
+- Doctor cases list (`/doctor` route) uses `refetchInterval` to poll every 2 s while any case has `status: 'queued'` or `'running'`; polling stops when all cases reach `'complete'` or `'failed'`.
+- Dashboard sidebar is role-isolated: `/` (landing) renders with no sidebar or header at all; `/nurse` sidebar shows only nurse-scoped nav + "Sign Out" back to `/`; `/doctor` (and `/cases/*`) sidebar shows "Active Cases", "Activity" (→ `/doctor/notifications`), a "Patients" section with per-patient triage links (→ `/cases/:id/triage`), and "Sign Out". No "Triage Intake" link in doctor sidebar. Never mix role nav items.
+- `DarkModeToggle` defaults to light mode — no OS `prefers-color-scheme` check; dark mode only activates when `localStorage.theme === 'dark'`. First-time visitors always see light mode.
+- Sidebar header is two-tier: Row 1 = logo icon + "Shadi" wordmark left-aligned, role badge (`NURSE`/`DOCTOR` emerald pill) right-aligned; Row 2 = username in muted small type below the wordmark. Never put the username on the same line as the logo.
+- `globals.css` must set `html, body { height: 100%; overflow: hidden; }` to lock window-level scroll; without this, the browser window scrolls instead of `<main>` (which has `overflow-y: auto`), causing the entire layout to slide up and expose blank viewport below.
+- `AppSidebar` reads session from `localStorage` in a `useEffect` — that effect must include `pathname` in its dependency array so the sidebar re-reads session data on every route change, not just on mount; omitting `pathname` causes the username/role badge to stay blank after a post-login redirect.
+- All dashboard API calls must use the `/api/` prefix (e.g. `/api/cases`, `/api/reports/${id}`) and `NEXT_PUBLIC_API_URL` must be empty/unset for same-origin requests; without this MSW never intercepts calls (they go to port 8000 instead of 3001).
+- `dashboard/next.config.ts` adds a rewrite `/api/:path* → ${NEXT_PUBLIC_API_URL}/:path*`; all `/api/*` calls proxy to FastAPI. Set `NEXT_PUBLIC_API_URL` to empty for mock mode (same-origin MSW) or `http://localhost:8000` for live backend.
+- MSW race condition guard: `AppSidebar` and `AppHeader` render outside `<Providers>` and fire fetches before MSW's service worker finishes registering. Any `useEffect` fetch in these components must delay ~300 ms and guard `setState` with `Array.isArray()`; without the delay early requests bypass MSW, return HTML/error strings, and crash `.map()`.
+- Dashboard test framework: Vitest (`bun run test`); config in `dashboard/vitest.config.ts` sets `NEXT_PUBLIC_API_URL=http://localhost` and uses MSW Node server (`msw/node`) for request interception; test files live in `dashboard/src/__tests__/`.
+- Backend routes in `api/routes/cases.py`: `GET /cases` (list with patient_name + chief_complaint), `GET /cases/:id` (detail), `POST /cases/intake` (NurseIntakePayload — no FHIR required; accepts chief_complaint, patient_name, patient_stub_id), `POST /cases/:id/feedback` (vote: `"up" | "down" | null` — toggleable, null clears the vote).

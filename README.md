@@ -2,7 +2,9 @@
 
 **Multi-agent clinical diagnostic reasoning system for emergency medicine.**
 
-A patient case arrives from the EHR via FHIR R4. Five specialist agents — each using domain-specific prompts over a shared **Ollama** Meditron model (`MEDITRON_MODEL`, default `meditron:70b`) — reason independently over the case, debate via a structured A2A protocol, and produce a ranked differential diagnosis with confidence scores, evidence citations, and a safety veto layer. The attending physician receives this before walking into the room. See [ADR-004](docs/decisions/adr-004-meditron-via-ollama.md).
+A patient case arrives from the EHR via FHIR R4. **Four specialist agents** — cardiology, neurology, pulmonology, toxicology — use domain-specific prompts over a shared **Ollama** Meditron model (`MEDITRON_MODEL`, default `meditron:70b`; [ADR-004](docs/decisions/adr-004-meditron-via-ollama.md)). They reason in parallel, then **evidence grounding**, a structured **A2A** debate, **orchestrator** synthesis, and a **safety veto**, producing a ranked differential with confidence scores and citations before the physician walks in. Intake (Qwen), imaging (MedGemma), and other models also run on Ollama; optional **vLLM + LoRA** is a Compose profile for experiments ([ADR-003](docs/decisions/adr-003-vllm-base-only-development.md)).
+
+The **target** design also includes intake enrichment of triage text, optional multimodal imaging, and (on vLLM) per-domain LoRA adapters on a shared Meditron base. **What is wired today** is summarized in [Wiring status (as implemented)](#wiring-status-as-implemented).
 
 ---
 
@@ -14,40 +16,61 @@ Diagnostic errors in emergency medicine are estimated to affect 12 million patie
 
 ## Architecture
 
+Shadi is a **local, air-gapped** stack: **Ollama** serves Meditron and all other agent models by default ([ADR-004](docs/decisions/adr-004-meditron-via-ollama.md)); optional **vLLM + LoRA** is available as a Compose profile ([ADR-003](docs/decisions/adr-003-vllm-base-only-development.md)). FastAPI + arq worker, Postgres/pgvector, Redis, and a Next.js physician dashboard complete the surface. PHI never leaves the machine (see [ADR-001](docs/decisions/adr-001-architecture.md)).
+
+**Specialist count:** exactly **four** domain agents (cardiology, neurology, pulmonology, toxicology) on shared **`MEDITRON_MODEL`**. The imaging agent uses MedGemma on Ollama — multimodal and separate from those four, not a fifth specialist weight load.
+
+### Target architecture (diagram)
+
+The diagram and the [agent pipeline](#agent-pipeline-end-to-end) table describe the **end-state design**. **Implemented routing:** specialists use `OLLAMA_BASE_URL` and `MEDITRON_MODEL` in `agents/specialists/`. Optional vLLM LoRA modules are defined in `docker-compose.yml` under the **`vllm-lora`** profile.
+
 ```mermaid
 flowchart TD
     EHR["EHR (Epic / Cerner)"]
     MCP["FHIR R4 MCP Server\n(encounter subscription)"]
-    Intake["Intake Agent\n(SNOMED · LOINC · RxNorm)"]
+    Intake["Intake Agent\n(qwen2.5:7b · SNOMED · LOINC · RxNorm)"]
     CaseObj["CaseObject"]
 
+    Img["Imaging Agent\n(MedGemma · optional if attachments)"]
     Cardio["Cardiology Agent\n(Meditron + prompt)"]
     Neuro["Neurology Agent\n(Meditron + prompt)"]
     Pulm["Pulmonology Agent\n(Meditron + prompt)"]
     Tox["Toxicology Agent\n(Meditron + prompt)"]
 
-    Evidence["Evidence Grounding Agent\n(PubMed + guidelines corpus)"]
+    Evidence["Evidence Grounding\n(embed + meditron claim eval)"]
     Debate["A2A Debate Round\n(ENDORSE · CHALLENGE · MODIFY)"]
-    Orchestrator["Orchestrator\n(consensus + divergence tracking)"]
-    Veto["Safety Veto Agent\n(meds · allergies · contraindications)"]
+    Orchestrator["Orchestrator synthesis\n(DeepSeek-R1)"]
+    Veto["Safety Veto\n(phi4:14b)"]
     Output["DiagnosticReport (FHIR)\n+ Physician Dashboard"]
 
     EHR --> MCP --> Intake --> CaseObj
+    CaseObj --> Img
     CaseObj --> Cardio & Neuro & Pulm & Tox
+    Img --> Evidence
     Cardio & Neuro & Pulm & Tox --> Evidence
     Evidence --> Debate --> Orchestrator --> Veto --> Output
 ```
 
-### Agent Pipeline
+### Agent pipeline (end-to-end)
 
-| Stage | Agent | Responsibility |
+| Stage | Component | Responsibility |
 |---|---|---|
+| 0 | **EHR → MCP** | Subscribe to encounters; deliver FHIR R4 bundles into the app |
 | 1 | **Intake** | Parse unstructured triage notes; extract SNOMED CT, LOINC, RxNorm codes; build `CaseObject` |
-| 2 | **Specialists ×4** | Cardiology, neurology, pulmonology, toxicology reason concurrently; no cross-talk yet |
-| 3 | **Evidence Grounding** | Each specialist's findings cross-referenced against local PubMed + clinical guidelines corpus; unsupported claims flagged |
-| 4 | **A2A Debate** | Agents exchange structured `ENDORSE / CHALLENGE / MODIFY` messages; orchestrator tracks consensus and divergence |
-| 5 | **Safety Veto** | Every recommended diagnostic step and treatment cross-checked against active medications, allergies, and contraindications; unsafe items blocked before output |
-| 6 | **Output Synthesis** | Top-5 ranked differential with confidence %, evidence citations, and next steps written as FHIR `DiagnosticReport`; surfaced on physician dashboard |
+| 2a | **Imaging (optional)** | If `imaging_attachments` exist, MedGemma interprets images; outputs structured findings (skipped when no attachments) |
+| 2b | **Specialists ×4** | Cardiology, neurology, pulmonology, toxicology on shared `MEDITRON_MODEL` (Ollama); domain via prompts; reason concurrently; no cross-talk until debate |
+| 3 | **Evidence grounding** | Retrieve from local vector index; evaluate whether evidence supports each claim (embedding model + Meditron reuse for claim eval) |
+| 4 | **A2A debate** | Structured `ENDORSE / CHALLENGE / MODIFY` messages; orchestrator records consensus and divergence |
+| 5 | **Orchestrator synthesis** | Rank differential, confidence scores, reconcile disagreement (dedicated reasoning model — ADR-002) |
+| 6 | **Safety veto** | Cross-check diagnostics and treatments vs meds, allergies, contraindications; block unsafe items |
+| 7 | **Output** | Top-ranked differential with evidence ties; FHIR `DiagnosticReport`; physician dashboard |
+
+### Wiring status (as implemented)
+
+- **Case intake:** `POST /cases` builds a `CaseObject` from the FHIR R4 bundle via `FHIRNormalizer.bundle_to_case` (`CaseObject.from_fhir_bundle` in `agents/schemas.py`). The LLM **IntakeAgent** (`qwen2.5:7b`) exists under `agents/intake/` and is covered by unit tests, but it is **not** called from `POST /cases` or from `Orchestrator.run()` yet.
+- **Diagnostic jobs:** The **`worker`** service runs arq `tasks.pipeline.run_diagnostic_pipeline`, which loads the case from Postgres and calls `Orchestrator().run(case)`. The orchestrator runs **four specialists** (Ollama `MEDITRON_MODEL`) → evidence grounding → A2A debate → orchestrator synthesis → safety veto. **ImageAnalysisAgent** (MedGemma) exists under `agents/specialists/image_agent.py` and is tested in isolation, but it is **not** invoked inside `Orchestrator.run()` yet.
+- **FHIR Subscription rest-hook:** Inbound notifications are handled by **`POST /fhir/notify`** on the **api** process (port **8000**), not a separate container. Configure `NOTIFICATION_ENDPOINT`, `FHIR_WEBHOOK_SECRET`, and related vars per `.env.example` when MCP is enabled.
+- **Local EHR for #26 / #27:** The in-repo **mock EHR** (`python -m tools.mock_ehr`) implements OAuth token, `Subscription`, and a demo rest-hook to Shadi. See [tools/mock_ehr/README.md](tools/mock_ehr/README.md). It is run **beside** Compose, not included in the default `docker compose up` profile.
 
 ---
 
@@ -114,10 +137,12 @@ Shadi is evaluated against **MIMIC-IV de-identified cases**, not just USMLE Q&A 
 
 ```bash
 cp .env.example .env
-# Edit .env — set model paths, EHR connection strings, etc.
+# Edit .env — set model paths, EHR connection strings, MOCK_LLM=false for real inference, etc.
 
 docker compose up
 ```
+
+Agents use the root [`config.py`](config.py) flag **`MOCK_LLM`** (default **`true`**): when true, LLM calls short-circuit to deterministic stubs so the stack runs without downloaded weights. Set **`MOCK_LLM=false`** in `.env` when Ollama is up and models are pulled (enable the optional **`vllm-lora`** profile only if you use HF + LoRA per ADR-003).
 
 On first boot, pull Ollama models (container name may vary — use `docker compose ps`):
 
@@ -130,10 +155,14 @@ docker compose exec ollama ollama pull phi4:14b
 docker compose exec ollama ollama pull deepseek-r1:32b
 ```
 
-Services:
-- `http://localhost:8000` — FastAPI backend
+Services (Compose):
+- `http://localhost:8000` — FastAPI **api** (includes **`POST /fhir/notify`** for Subscription rest-hook when configured)
 - `http://localhost:3000` — Physician dashboard
-- `http://localhost:11434` — Ollama (all models, including Meditron for specialists — [ADR-004](docs/decisions/adr-004-meditron-via-ollama.md))
+- `http://localhost:11434` — Ollama (all agent models, including Meditron for specialists — [ADR-004](docs/decisions/adr-004-meditron-via-ollama.md))
+- `http://localhost:8080` — vLLM (**only** with `--profile vllm-lora`; not used by default agents)
+- **`worker`** — arq consumer for `tasks.pipeline.run_diagnostic_pipeline` (no extra HTTP port)
+
+For **OAuth + FHIR Subscription + rest-hook** (#26–#27), default Compose does not bundle a reference FHIR server. Use the in-repo **mock EHR**: [`tools/mock_ehr/README.md`](tools/mock_ehr/README.md) (`python -m tools.mock_ehr`, default port 9001). Optional Dockerized HAPI (or similar) remains future work; see [`docs/cross-track-dependencies.md`](docs/cross-track-dependencies.md) (*Local FHIR or EHR stub (#25)*).
 
 ### Optional vLLM (`vllm-lora` profile)
 
@@ -253,19 +282,27 @@ bun dev
 shadi/
 ├── agents/
 │   ├── base.py                  # BaseAgent ABC
-│   ├── intake/                  # Triage note parsing → CaseObject
-│   ├── specialists/             # Cardiology, neurology, pulmonology, toxicology
+│   ├── intake/                  # IntakeAgent (Qwen) — see Wiring status
+│   ├── specialists/             # Four LoRA specialists + image_agent (MedGemma)
 │   ├── evidence/                # PubMed + guidelines cross-reference
 │   ├── safety/                  # Safety veto agent
 │   └── orchestrator/            # Fan-out, A2A debate, synthesis
 ├── shadi_fhir/                  # FHIR R4 normalizer + MCP (OAuth #26, Subscription/notify #27, teardown #29)
 ├── a2a/                         # A2A protocol schema + debate round logic
 ├── models/                      # Optional local inference helpers (vLLM-related)
-├── api/                         # FastAPI app + routes
+├── api/                         # FastAPI app + routes (incl. POST /fhir/notify)
+├── tasks/                       # arq worker + pipeline job
+├── tools/
+│   └── mock_ehr/                # Local mock EHR for OAuth + Subscription + rest-hook demos
 ├── dashboard/                   # Next.js physician dashboard
+├── skills/                      # Shared Cursor/agent skills (see AGENTS.md)
+├── scripts/                     # Repo maintenance scripts
 ├── docs/decisions/              # Architecture Decision Records
+├── config.py                    # Agent settings (MOCK_LLM, inference URLs)
+├── docker-compose.yml           # vLLM + Ollama + api + worker + postgres + redis + dashboard
+├── pyproject.toml
 └── tests/
-    ├── fixtures/sample_cases/   # De-identified MIMIC-IV fixtures
+    ├── fixtures/                # FHIR bundles, report JSON for tests
     └── unit/
 ```
 

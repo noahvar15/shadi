@@ -86,7 +86,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.demo
+        required: false
     environment:
       - DATABASE_URL=postgresql+asyncpg://shadi:shadi@postgres:5432/shadi
       - REDIS_URL=redis://redis:6379/0
@@ -124,7 +128,11 @@ services:
       context: .
       dockerfile: Dockerfile.api
     command: arq tasks.worker.WorkerSettings
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.demo
+        required: false
     environment:
       - DATABASE_URL=postgresql+asyncpg://shadi:shadi@postgres:5432/shadi
       - REDIS_URL=redis://redis:6379/0

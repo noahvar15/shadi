@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -72,6 +73,26 @@ async def test_get_token_cached_within_ttl() -> None:
     t2 = await server._get_token()
     assert t1 == t2 == "tok1"
     assert mock_http.post.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_invalid_expires_in_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = _make_server()
+    ok = _http_response(
+        200,
+        json_data={"access_token": "unit-test-oauth-token", "expires_in": "not-a-number"},
+        url=server._token_url,
+    )
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=ok)
+    server._http = mock_http
+    fixed_mono = 1_000_000.0
+    monkeypatch.setattr(time, "monotonic", lambda: fixed_mono)
+    await server._refresh_token()
+    assert server._access_token == "unit-test-oauth-token"
+    assert server._token_deadline_monotonic == fixed_mono + 300.0
 
 
 @pytest.mark.asyncio

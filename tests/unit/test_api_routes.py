@@ -19,6 +19,7 @@ _MINIMAL_FHIR_BUNDLE = {"resourceType": "Bundle", "type": "collection", "entry":
 def _app_test_client(monkeypatch: pytest.MonkeyPatch, mock_conn: AsyncMock):
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@127.0.0.1:9/nope")
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:9/0")
+    monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-for-pytest")
     monkeypatch.setenv("SHADI_STUB_CASE_INTAKE", "1")
 
     from api.config import get_settings
@@ -118,13 +119,16 @@ def test_report_status_queued(api_client) -> None:
 
 
 def test_get_report_not_ready(api_client) -> None:
+    """GET /reports/:id returns 200 with status while the pipeline is still running."""
     client, mock_conn, _mock_arq = api_client
     cid = uuid4()
     mock_conn.fetchrow = AsyncMock(
         return_value={"status": "queued", "report_json": None},
     )
     r = client.get(f"/reports/{cid}")
-    assert r.status_code == 404
+    assert r.status_code == 200
+    assert r.json()["status"] == "queued"
+    assert r.json()["top_diagnoses"] == []
 
 
 def test_get_report_ready(api_client) -> None:
