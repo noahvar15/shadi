@@ -1,9 +1,29 @@
-// MSW request handlers for offline / test mock mode.
-// Intercepts all API calls used by the dashboard until the real backend is live.
 import { http, HttpResponse } from 'msw'
 import type { DifferentialReport } from '@/types/report'
 
 let caseCounter = 1000
+
+const PIPELINE_STEPS = ['specialists', 'evidence', 'debate', 'synthesis', 'safety'] as const
+const PIPELINE_DURATION_MS = 12_000
+
+interface PipelineState {
+  startedAt: number
+  completedAt?: number
+}
+const pipelineStates = new Map<string, PipelineState>()
+
+function getPipelineStatus(caseId: string): { status: string; pipeline_step: string | null; completed_at: string | null } {
+  const state = pipelineStates.get(caseId)
+  if (!state) return { status: 'complete', pipeline_step: null, completed_at: new Date(Date.now() - 1800_000).toISOString() }
+  if (state.completedAt) return { status: 'complete', pipeline_step: null, completed_at: new Date(state.completedAt).toISOString() }
+  const elapsed = Date.now() - state.startedAt
+  if (elapsed >= PIPELINE_DURATION_MS) {
+    state.completedAt = Date.now()
+    return { status: 'complete', pipeline_step: null, completed_at: new Date(state.completedAt).toISOString() }
+  }
+  const stepIdx = Math.min(Math.floor((elapsed / PIPELINE_DURATION_MS) * PIPELINE_STEPS.length), PIPELINE_STEPS.length - 1)
+  return { status: 'processing', pipeline_step: PIPELINE_STEPS[stepIdx], completed_at: null }
+}
 
 const MOCK_PATIENTS = [
   { patient_id: 'PT-DEMO-001', patient_name: 'Maria Gonzalez', dob: '1978-04-15' },
@@ -105,7 +125,11 @@ export const handlers = [
 
   // ── Cases list ──────────────────────────────────────────────────────────────
   http.get('/api/cases', () => {
-    return HttpResponse.json(MOCK_CASES)
+    const cases = MOCK_CASES.map((c) => {
+      const ps = getPipelineStatus(c.case_id)
+      return { ...c, status: ps.status === 'complete' ? 'complete' : c.status === 'complete' ? 'complete' : ps.status }
+    })
+    return HttpResponse.json(cases)
   }),
 
   // ── Individual case (for triage doc) ────────────────────────────────────────
@@ -121,11 +145,12 @@ export const handlers = [
   http.post('/api/cases/intake', async ({ request }) => {
     const body = await request.json() as Record<string, unknown>
     const caseId = `CASE-${Date.now()}-${caseCounter++}`
+    pipelineStates.set(caseId, { startedAt: Date.now() })
     MOCK_CASES.unshift({
       case_id: caseId,
       patient_id: String(body.patient_stub_id ?? 'STUB'),
       patient_name: String(body.patient_name ?? 'Unknown Patient'),
-      status: 'queued',
+      status: 'processing',
       created_at: new Date().toISOString(),
       chief_complaint: String(body.chief_complaint ?? ''),
     })
@@ -160,10 +185,33 @@ export const handlers = [
 
   // ── Reports ─────────────────────────────────────────────────────────────────
   http.get('/api/reports/:caseId', ({ params }) => {
-    return HttpResponse.json({ ...MOCK_REPORT, case_id: params.caseId })
+    const caseId = String(params.caseId)
+    const ps = getPipelineStatus(caseId)
+
+    if (ps.status !== 'complete') {
+      return HttpResponse.json({
+        case_id: caseId,
+        status: ps.status,
+        pipeline_step: ps.pipeline_step,
+        top_diagnoses: [],
+        consensus_level: 0,
+        divergent_agents: [],
+        vetoed_recommendations: [],
+        completed_at: null,
+        error_message: null,
+      })
+    }
+
+    return HttpResponse.json({
+      ...MOCK_REPORT,
+      case_id: caseId,
+      completed_at: ps.completed_at,
+      pipeline_step: null,
+    })
   }),
 
   http.get('/api/reports/:caseId/status', ({ params }) => {
-    return HttpResponse.json({ case_id: params.caseId, status: 'processing' })
+    const ps = getPipelineStatus(String(params.caseId))
+    return HttpResponse.json({ case_id: params.caseId, status: ps.status })
   }),
 ]
