@@ -44,7 +44,7 @@ async def init_pool(database_url: str) -> asyncpg.Pool:
 async def ensure_schema(pool: asyncpg.Pool) -> None:
     """Create core tables and apply idempotent upgrades (safe on every process start)."""
     async with pool.acquire() as conn:
-        await conn.execute(f"""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS cases (
                 id UUID PRIMARY KEY,
                 status VARCHAR(32) NOT NULL,
@@ -67,7 +67,9 @@ async def ensure_schema(pool: asyncpg.Pool) -> None:
             DO $$
             BEGIN
               IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = 'cases_status_check'
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'cases_status_check'
+                  AND conrelid = 'public.cases'::regclass
               ) THEN
                 ALTER TABLE cases ADD CONSTRAINT cases_status_check
                   CHECK (status IN ({_CHECK_VALUES_SQL}));
@@ -100,7 +102,7 @@ async def ensure_schema(pool: asyncpg.Pool) -> None:
             CREATE OR REPLACE FUNCTION shadi_touch_cases_updated_at()
             RETURNS trigger LANGUAGE plpgsql AS $$
             BEGIN
-              NEW.updated_at := clock_timestamp();
+              NEW.updated_at := NOW();
               RETURN NEW;
             END;
             $$;
