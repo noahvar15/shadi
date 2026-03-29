@@ -28,7 +28,9 @@ _PLACEHOLDER_API_SECRETS = frozenset(
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Try .env first (git-ignored personal override), then fall back to the
+        # committed .env.demo so teammates can run the stack without any manual cp.
+        env_file=[".env", ".env.demo"],
         env_file_encoding="utf-8",
         extra="ignore",
     )
