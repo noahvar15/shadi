@@ -1,7 +1,9 @@
 import axios, { isAxiosError } from 'axios'
 
+// Empty string = same-origin: requests go to Next.js which rewrites /api/* → FastAPI.
+// Set NEXT_PUBLIC_API_URL only for cross-origin deployments (e.g. separate domains).
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || '',
   headers: { 'Content-Type': 'application/json' },
 })
 
