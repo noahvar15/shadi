@@ -119,13 +119,16 @@ def test_report_status_queued(api_client) -> None:
 
 
 def test_get_report_not_ready(api_client) -> None:
+    """GET /reports/:id returns 200 with status while the pipeline is still running."""
     client, mock_conn, _mock_arq = api_client
     cid = uuid4()
     mock_conn.fetchrow = AsyncMock(
         return_value={"status": "queued", "report_json": None},
     )
     r = client.get(f"/reports/{cid}")
-    assert r.status_code == 404
+    assert r.status_code == 200
+    assert r.json()["status"] == "queued"
+    assert r.json()["top_diagnoses"] == []
 
 
 def test_get_report_ready(api_client) -> None:

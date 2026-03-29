@@ -60,19 +60,14 @@ const MOCK_CASES: MockCase[] = [
 const MOCK_REPORT: DifferentialReport = {
   case_id: 'CASE-DEMO-001',
   status: 'complete',
-  created_at: new Date(Date.now() - 3600_000).toISOString(),
-  completed_at: new Date(Date.now() - 3000_000).toISOString(),
   consensus_level: 0.9,
   divergent_agents: [],
   top_diagnoses: [
     {
-      diagnosis: 'Acute Myocardial Infarction',
-      icd_code: 'I21.9',
+      rank: 1,
+      display: 'Acute Myocardial Infarction',
+      snomed_code: '57054005',
       confidence: 0.87,
-      reasoning_trace: [
-        'Chest pain radiating to left arm with 2-hour onset',
-        'Classic STEMI presentation pattern',
-      ],
       next_steps: ['Urgent ECG', 'Troponin levels', 'Cardiology consult'],
       supporting_evidence: [
         {
@@ -81,14 +76,16 @@ const MOCK_REPORT: DifferentialReport = {
           relevance_score: 0.92,
         },
       ],
+      flags: [],
     },
     {
-      diagnosis: 'Unstable Angina',
-      icd_code: 'I20.0',
+      rank: 2,
+      display: 'Unstable Angina',
+      snomed_code: '4557003',
       confidence: 0.61,
-      reasoning_trace: ['Chest pain pattern consistent with ischemic origin'],
       next_steps: ['Serial ECGs', 'Biomarker monitoring'],
       supporting_evidence: [],
+      flags: [],
     },
   ],
   vetoed_recommendations: [],

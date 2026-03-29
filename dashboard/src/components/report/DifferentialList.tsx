@@ -53,13 +53,13 @@ function DiagnosisCard({ diagnosis, rank, onCitationClick }: DiagnosisCardProps)
 
           {/* Diagnosis name */}
           <span className="font-semibold text-slate-900 dark:text-slate-100 flex-1 leading-tight">
-            {diagnosis.diagnosis}
+            {diagnosis.display}
           </span>
 
-          {/* ICD code */}
-          {diagnosis.icd_code && (
+          {/* SNOMED code */}
+          {diagnosis.snomed_code && (
             <span className="font-mono text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
-              {diagnosis.icd_code}
+              {diagnosis.snomed_code}
             </span>
           )}
 
@@ -102,17 +102,17 @@ function DiagnosisCard({ diagnosis, rank, onCitationClick }: DiagnosisCardProps)
       {/* Expanded content */}
       {expanded && (
         <div className="px-4 pb-4 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-4">
-          {/* Reasoning */}
-          {diagnosis.reasoning_trace.length > 0 && (
-            <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
-                Reasoning
-              </h4>
-              <ul className="space-y-1 list-disc list-inside text-sm text-slate-700 dark:text-slate-300">
-                {diagnosis.reasoning_trace.map((item, i) => (
-                  <li key={i}>{item}</li>
-                ))}
-              </ul>
+          {/* Flags (e.g. EVIDENCE_GAP) */}
+          {diagnosis.flags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {diagnosis.flags.map((flag, i) => (
+                <span
+                  key={i}
+                  className="inline-block px-2 py-0.5 text-xs font-medium rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+                >
+                  {flag}
+                </span>
+              ))}
             </div>
           )}
 
@@ -152,11 +152,11 @@ export function DifferentialList({ diagnoses, onCitationClick }: DifferentialLis
 
   return (
     <section aria-label="Differential diagnoses" className="space-y-3">
-      {diagnoses.map((diagnosis, idx) => (
+      {diagnoses.map((diagnosis) => (
         <DiagnosisCard
-          key={diagnosis.icd_code ?? diagnosis.diagnosis}
+          key={diagnosis.snomed_code ?? diagnosis.display}
           diagnosis={diagnosis}
-          rank={idx + 1}
+          rank={diagnosis.rank}
           onCitationClick={onCitationClick}
         />
       ))}

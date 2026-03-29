@@ -229,7 +229,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
         evidence={selectedDiagnosis?.supporting_evidence ?? []}
         isOpen={!!selectedDiagnosis}
         onClose={() => setSelectedDiagnosis(null)}
-        diagnosisName={selectedDiagnosis?.diagnosis ?? ''}
+        diagnosisName={selectedDiagnosis?.display ?? ''}
       />
     </>
   )

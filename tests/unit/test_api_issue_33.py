@@ -35,6 +35,12 @@ def test_report_status_queued(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_get_report_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET /reports/:id returns 200 with status while the pipeline is still running.
+
+    The old 404 behaviour prevented the dashboard from polling a single endpoint;
+    now the response always includes ``status`` so the client can stop polling
+    when status reaches ``complete``.
+    """
     mock_conn = AsyncMock()
     mock_conn.fetchrow = AsyncMock(
         return_value={"status": "queued", "report_json": None},
@@ -42,7 +48,9 @@ def test_get_report_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     cid = uuid4()
     with patched_api_app(monkeypatch, mock_conn) as (client, _, _):
         r = client.get(f"/reports/{cid}")
-    assert r.status_code == 404
+    assert r.status_code == 200
+    assert r.json()["status"] == "queued"
+    assert r.json()["top_diagnoses"] == []
 
 
 def test_get_report_complete(monkeypatch: pytest.MonkeyPatch) -> None:
