@@ -13,7 +13,7 @@ Two inference servers run in parallel (see ADR-002):
   because Ollama does not support LoRA hot-swapping.
 
 - **Ollama** (``OLLAMA_BASE_URL``, default port 11434) — serves all other
-  models: ``medgemma:27b`` (image), ``qwen2.5:7b`` (intake),
+  models: ``alibayram/medgemma:27b`` (image), ``qwen2.5:7b`` (intake),
   ``nomic-embed-text`` (evidence retrieval), ``phi4:14b`` (safety veto),
   ``deepseek-r1:32b`` (orchestrator).
 

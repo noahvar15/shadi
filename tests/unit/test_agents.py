@@ -95,7 +95,7 @@ def test_all_agents_have_describe():
 def test_describe_returns_correct_values():
     expected = {
         IntakeAgent: ("intake", "intake", "qwen2.5:7b"),
-        ImageAnalysisAgent: ("image-analysis", "imaging", "medgemma:27b"),
+        ImageAnalysisAgent: ("image-analysis", "imaging", "alibayram/medgemma:27b"),
         CardiologyAgent: ("cardiology", "cardiology", "cardiology"),
         NeurologyAgent: ("neurology", "neurology", "neurology"),
         PulmonologyAgent: ("pulmonology", "pulmonology", "pulmonology"),

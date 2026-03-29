@@ -57,7 +57,7 @@ Two inference servers run side-by-side. vLLM handles the specialists (LoRA hot-s
 
 | Agent | Model | Server | Approx VRAM |
 |---|---|---|---|
-| Image analysis | `medgemma:27b` | Ollama | ~16 GB |
+| Image analysis | `alibayram/medgemma:27b` | Ollama | ~17 GB |
 | Intake | `qwen2.5:7b` | Ollama | ~4.5 GB |
 | Specialists ×4 (base) | `meditron:70b` FP4 | vLLM | ~38 GB |
 | Specialist LoRA adapters ×4 | cardiology / neurology / pulmonology / toxicology | vLLM | ~8 GB |
@@ -126,7 +126,7 @@ docker compose up
 On first boot, pull the Ollama models (vLLM loads Meditron from the path in `.env`):
 
 ```bash
-docker exec shadi-ollama-1 ollama pull medgemma:27b
+docker exec shadi-ollama-1 ollama pull alibayram/medgemma:27b
 docker exec shadi-ollama-1 ollama pull qwen2.5:7b
 docker exec shadi-ollama-1 ollama pull nomic-embed-text
 docker exec shadi-ollama-1 ollama pull phi4:14b
