@@ -18,6 +18,8 @@ from agents.schemas import CaseObject
 from api.config import Settings, get_settings
 from api.deps import ArqDep, PoolDep
 from shadi_fhir.exceptions import FHIRValidationError
+from shadi_fhir.normalizer import FHIRNormalizer
+from shadi_fhir.triage_bundle import build_triage_bundle
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -116,13 +118,25 @@ async def create_case_intake(
     arq_redis: ArqDep,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> CaseQueuedResponse:
-    """Accept the nurse triage form and enqueue the diagnostic pipeline."""
-    case = CaseObject(
-        patient_id=payload.patient_stub_id or "stub",
-        encounter_id="stub-encounter",
+    """Accept the nurse triage form and enqueue the diagnostic pipeline.
+
+    Builds a FHIR R4 Bundle from the triage text via ``build_triage_bundle``,
+    then normalises it through ``FHIRNormalizer`` — the same path as the live
+    EHR subscription, so intake and FHIR-push produce identical ``CaseObject``
+    shapes.
+    """
+    patient_id = payload.patient_stub_id or "stub"
+    fhir_bundle = build_triage_bundle(
+        patient_id=patient_id,
+        encounter_id="enc-intake",
+        triage_text=payload.chief_complaint,
         chief_complaint=payload.chief_complaint,
-        triage_notes_raw=payload.chief_complaint,
     )
+    try:
+        case = FHIRNormalizer().bundle_to_case(fhir_bundle)
+    except (FHIRValidationError, ValidationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     # Persist patient_name alongside the CaseObject in case_json.
     case_dict = case.model_dump(mode="json")
     if payload.patient_name:
