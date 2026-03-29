@@ -49,29 +49,51 @@ function EmptyState() {
   )
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  complete: 'Complete',
+  processing: 'Processing',
+  queued: 'Queued',
+  pending_enqueue: 'Pending',
+  enqueue_failed: 'Failed to Queue',
+  failed: 'Failed',
+}
+
 function CaseCard({ c }: { c: Case }) {
+  const displayName = c.patient_name || c.patient_id
+  const chiefComplaintLine = c.chief_complaint
+    ?.split('\n')
+    .find((l) => l.startsWith('Chief Complaint:'))
+    ?.replace('Chief Complaint:', '')
+    .trim()
+  const summary = chiefComplaintLine || c.chief_complaint?.split('\n')[0] || ''
+
   return (
     <Link
       href={`/cases/${c.case_id}`}
       className="block p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg hover:border-emerald-400 dark:hover:border-emerald-600 transition-colors"
     >
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-mono text-slate-700 dark:text-slate-300 truncate">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+            {displayName}
+          </p>
+          {summary && (
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 line-clamp-2">
+              {summary}
+            </p>
+          )}
+          <p className="text-xs font-mono text-slate-400 dark:text-slate-500 mt-1.5">
             {c.case_id}
           </p>
-          <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5">
-            Patient {c.patient_id}
-          </p>
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
           <span
             className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${STATUS_STYLES[c.status] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}
           >
-            {c.status}
+            {STATUS_LABELS[c.status] ?? c.status}
           </span>
           <span className="text-xs text-slate-400 dark:text-slate-500">
-            {new Date(c.created_at).toLocaleDateString()}
+            {new Date(c.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </span>
         </div>
       </div>
