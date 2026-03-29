@@ -53,9 +53,11 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
   const { data: report, error, isLoading } = useQuery<DifferentialReport, Error>({
     queryKey: ['report', id],
     queryFn: () => api.get<DifferentialReport>(`/reports/${id}`).then((r) => r.data),
-    // Stop polling once complete; TanStack Query cleans up on unmount so no memory leak risk.
-    refetchInterval: (query) =>
-      query.state.data?.status === 'complete' ? false : 2000,
+    // Stop polling once terminal (complete or failed); keep polling while queued/running.
+    refetchInterval: (query) => {
+      const s = query.state.data?.status
+      return s === 'complete' || s === 'failed' ? false : 2000
+    },
   })
 
   const isInProgress =
@@ -69,6 +71,26 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
             Failed to load report
           </p>
           <p className="text-red-600 dark:text-red-400 text-sm mt-1">{error.message}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (report?.status === 'failed') {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="flex items-center gap-2 px-6 py-3 border-b border-[var(--border)] -mx-4 -mt-8 mb-8">
+          <Link href="/doctor" className="text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] flex items-center gap-1 transition-colors">
+            <ChevronLeft size={14} /> Cases
+          </Link>
+        </div>
+        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md p-5">
+          <p className="text-red-700 dark:text-red-300 font-medium text-sm">
+            Diagnostic pipeline failed
+          </p>
+          <p className="text-red-600 dark:text-red-400 text-sm mt-1">
+            The agent pipeline encountered an error processing this case. Please try resubmitting.
+          </p>
         </div>
       </div>
     )

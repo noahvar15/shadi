@@ -9,7 +9,7 @@ import { api } from '@/lib/api'
 
 interface CreateCasePayload {
   chief_complaint: string
-  patient_id?: string
+  patient_stub_id?: string
 }
 
 interface CreateCaseResponse {
@@ -41,7 +41,7 @@ export default function NursePage() {
 
     const payload: CreateCasePayload = {
       chief_complaint: chiefComplaint.trim(),
-      ...(patientStubId.trim() ? { patient_id: patientStubId.trim() } : {}),
+      ...(patientStubId.trim() ? { patient_stub_id: patientStubId.trim() } : {}),
     }
 
     mutate(payload)
@@ -84,7 +84,7 @@ export default function NursePage() {
                 setChiefComplaint(e.target.value)
                 if (validationError) setValidationError(null)
               }}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition resize-none"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition resize-none"
             />
             {validationError && (
               <p className="text-xs text-red-500 dark:text-red-400" role="alert">
@@ -108,7 +108,7 @@ export default function NursePage() {
               placeholder="e.g. PT-2024-001 — leave blank to auto-generate"
               value={patientStubId}
               onChange={(e) => setPatientStubId(e.target.value)}
-              className="w-full px-3 py-2 text-sm font-mono rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition"
+              className="w-full px-3 py-2 text-sm font-mono rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
             />
           </div>
 
@@ -124,7 +124,7 @@ export default function NursePage() {
           <button
             type="submit"
             disabled={isPending}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
           >
             {isPending ? (
               <>

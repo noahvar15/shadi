@@ -61,6 +61,7 @@ export function CitationPanel({ evidence, isOpen, onClose, diagnosisName }: Cita
           ) : (
             evidence.map((ev, idx) => {
               const pubmed = parsePubMed(ev.source)
+              const relevancePct = Math.max(0, Math.min(100, Math.round(ev.relevance_score * 100)))
               return (
                 <div key={idx} className="space-y-2">
                   {/* Source */}
@@ -88,14 +89,14 @@ export function CitationPanel({ evidence, isOpen, onClose, diagnosisName }: Cita
                   <div className="space-y-1">
                     <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
                       <span>Relevance</span>
-                      <span>{Math.round(ev.relevance_score * 100)}%</span>
+                      <span>{relevancePct}%</span>
                     </div>
                     <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                        style={{ width: `${ev.relevance_score * 100}%` }}
+                        style={{ width: `${relevancePct}%` }}
                         role="progressbar"
-                        aria-valuenow={Math.round(ev.relevance_score * 100)}
+                        aria-valuenow={relevancePct}
                         aria-valuemin={0}
                         aria-valuemax={100}
                       />

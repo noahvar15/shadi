@@ -14,11 +14,11 @@ export default function RolePage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-2xl">
         <Link
           href="/nurse"
-          className="group flex flex-col gap-4 p-8 bg-[var(--surface)] border border-[var(--border)] rounded-card shadow-card hover:shadow-card-hover hover:border-violet-400 dark:hover:border-violet-500 transition-all duration-200"
+          className="group flex flex-col gap-4 p-8 bg-[var(--surface)] border border-[var(--border)] rounded-card shadow-card hover:shadow-card-hover hover:border-emerald-400 dark:hover:border-emerald-500 transition-all duration-200"
         >
           <div className="flex items-start justify-between">
-            <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-900/30">
-              <Stethoscope size={40} className="text-violet-600 dark:text-violet-400" strokeWidth={1.5} />
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/30">
+              <Stethoscope size={40} className="text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
             </div>
             <ArrowRight
               size={18}
@@ -35,11 +35,11 @@ export default function RolePage() {
 
         <Link
           href="/doctor"
-          className="group flex flex-col gap-4 p-8 bg-[var(--surface)] border border-[var(--border)] rounded-card shadow-card hover:shadow-card-hover hover:border-violet-400 dark:hover:border-violet-500 transition-all duration-200"
+          className="group flex flex-col gap-4 p-8 bg-[var(--surface)] border border-[var(--border)] rounded-card shadow-card hover:shadow-card-hover hover:border-emerald-400 dark:hover:border-emerald-500 transition-all duration-200"
         >
           <div className="flex items-start justify-between">
-            <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-900/30">
-              <ClipboardList size={40} className="text-violet-600 dark:text-violet-400" strokeWidth={1.5} />
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/30">
+              <ClipboardList size={40} className="text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
             </div>
             <ArrowRight
               size={18}

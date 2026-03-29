@@ -12,7 +12,7 @@ interface DifferentialListProps {
 function confidenceBarClass(confidence: number): string {
   if (confidence > 0.8) return 'bg-emerald-500'
   if (confidence >= 0.5) return 'bg-amber-400'
-  return 'bg-slate-400 dark:bg-teal-600'
+  return 'bg-slate-400 dark:bg-red-600'
 }
 
 function confidenceTextClass(confidence: number): string {
@@ -35,7 +35,8 @@ interface DiagnosisCardProps {
 
 function DiagnosisCard({ diagnosis, rank, onCitationClick }: DiagnosisCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const pct = Math.round(diagnosis.confidence * 100)
+  const normalizedConfidence = Math.max(0, Math.min(1, diagnosis.confidence))
+  const pct = Math.round(normalizedConfidence * 100)
 
   return (
     <div className="border border-slate-200 dark:border-slate-700 rounded-md overflow-hidden bg-white dark:bg-slate-900">
@@ -63,7 +64,7 @@ function DiagnosisCard({ diagnosis, rank, onCitationClick }: DiagnosisCardProps)
           )}
 
           {/* Confidence % */}
-          <span className={`text-sm font-semibold flex-shrink-0 ${confidenceTextClass(diagnosis.confidence)}`}>
+          <span className={`text-sm font-semibold font-mono flex-shrink-0 ${confidenceTextClass(normalizedConfidence)}`}>
             {pct}%
           </span>
 
@@ -92,7 +93,7 @@ function DiagnosisCard({ diagnosis, rank, onCitationClick }: DiagnosisCardProps)
           aria-label={`Confidence: ${pct}%`}
         >
           <div
-            className={`h-full rounded-full transition-all duration-300 ${confidenceBarClass(diagnosis.confidence)}`}
+            className={`h-full rounded-full transition-all duration-300 ${confidenceBarClass(normalizedConfidence)}`}
             style={{ width: `${pct}%` }}
           />
         </div>

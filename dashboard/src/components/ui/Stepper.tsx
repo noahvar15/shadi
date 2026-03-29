@@ -8,15 +8,17 @@ interface StepperProps {
 }
 
 export function Stepper({ steps, currentStep }: StepperProps) {
+  const safeCurrentStep = Math.min(Math.max(currentStep, 0), Math.max(steps.length - 1, 0))
+
   return (
     <nav aria-label="Form steps" className="flex items-start justify-between w-full">
       {steps.map((label, index) => {
-        const isCompleted = index < currentStep
-        const isCurrent = index === currentStep
-        const isFuture = index > currentStep
+        const isCompleted = index < safeCurrentStep
+        const isCurrent = index === safeCurrentStep
+        const isFuture = index > safeCurrentStep
 
         return (
-          <div key={label} className="flex flex-col items-center flex-1 relative">
+          <div key={`${label}-${index}`} className="flex flex-col items-center flex-1 relative">
             {/* Connecting line — drawn to the right of each step except the last */}
             {index < steps.length - 1 && (
               <div
