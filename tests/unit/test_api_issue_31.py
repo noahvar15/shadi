@@ -73,6 +73,19 @@ def test_api_secret_rejects_placeholders(monkeypatch: pytest.MonkeyPatch) -> Non
     get_settings.cache_clear()
 
 
+def test_fhir_webhook_secret_rejects_placeholders(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://a:b@localhost:5432/x")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-for-pytest-min-32-chars-here")
+    monkeypatch.setenv("FHIR_WEBHOOK_SECRET", "change-me")
+    from api.config import Settings, get_settings
+
+    get_settings.cache_clear()
+    with pytest.raises(ValueError, match="FHIR_WEBHOOK_SECRET"):
+        Settings()
+    get_settings.cache_clear()
+
+
 def test_lifespan_sets_pool_and_arq_on_state(monkeypatch: pytest.MonkeyPatch) -> None:
     with _patched_lifespan(monkeypatch) as (client, mock_pool, mock_arq):
         assert client.app.state.pool is mock_pool

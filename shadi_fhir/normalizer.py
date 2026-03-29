@@ -247,13 +247,22 @@ def _build_allergy(
     )
 
 
+def _loinc_system_match(system: str | None) -> bool:
+    s = str(system or "").rstrip("/")
+    return s == "http://loinc.org"
+
+
 def _is_loinc_triage_narrative_observation(res: dict[str, Any]) -> bool:
     """LOINC 34109-9 — full triage / HPI text in ``valueString`` (issue #70)."""
     code = res.get("code")
     if not isinstance(code, dict):
         return False
     for c in code.get("coding") or []:
-        if isinstance(c, dict) and c.get("code") == LOINC_TRIAGE_NARRATIVE:
+        if (
+            isinstance(c, dict)
+            and _loinc_system_match(c.get("system"))
+            and c.get("code") == LOINC_TRIAGE_NARRATIVE
+        ):
             return True
     return False
 

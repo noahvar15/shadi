@@ -19,6 +19,7 @@ _MINIMAL_FHIR_BUNDLE = {"resourceType": "Bundle", "type": "collection", "entry":
 def _app_test_client(monkeypatch: pytest.MonkeyPatch, mock_conn: AsyncMock):
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@127.0.0.1:9/nope")
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:9/0")
+    monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-for-pytest")
     monkeypatch.setenv("SHADI_STUB_CASE_INTAKE", "1")
 
     from api.config import get_settings

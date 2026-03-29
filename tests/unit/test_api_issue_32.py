@@ -24,6 +24,7 @@ def _cases_api_with_mocks(
 ):
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@127.0.0.1:9/nope")
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:9/0")
+    monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-for-pytest")
     if shadi_stub_env is not None:
         monkeypatch.setenv("SHADI_STUB_CASE_INTAKE", shadi_stub_env)
     else:

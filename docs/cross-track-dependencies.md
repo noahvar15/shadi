@@ -1,6 +1,6 @@
 # Cross-Track Dependencies
 
-**Last updated:** 2026-03-28
+**Last updated:** 2026-03-28 (local FHIR simulator plan added)
 
 This document maps every dependency between the four parallel development tracks so contributors know what they are waiting on, what they are blocking, and how to stay unblocked while those dependencies resolve.
 
@@ -108,6 +108,24 @@ These are the moments when two tracks need to sync:
 | **Orchestrator job signature** | Before #39 is merged | Joshua + Emmanuel agree on the arq task signature: `run_diagnostic_pipeline(ctx, case_id: str)` and what the persisted `DifferentialReport` JSON looks like |
 | **API response shapes** | Before #32/#33 are merged | Emmanuel + Ericsen agree on exact JSON field names so mock fixtures match the real responses |
 | **Inference URL config** | Before #36 is merged | Joshua + Emmanuel confirm `OLLAMA_BASE_URL` and `VLLM_BASE_URL` env var names match `api/config.py` `Settings` model |
+| **Local FHIR / EHR simulator** | Before treating #26 / #27 integration as release-ready for demos or CI | Noah picks the approach; Noah + Emmanuel if it ships in `docker-compose.yml` (image, profile, ports). Document dev `FHIR_*` and `NOTIFICATION_ENDPOINT` in `.env.example` and this doc |
+
+---
+
+## Planned: Local FHIR or EHR stub (#25)
+
+**Owner:** Noah (FHIR / EHR track). **Coordinate with** Emmanuel if the solution is wired into `docker-compose.yml` (new service, compose profile, or healthchecks).
+
+**Why:** Unit tests and fixtures (`tests/fixtures/sample_bundle.json`, `tests/unit/test_fhir_webhook.py`) already cover **bundle → `CaseObject`** and **signed `POST /fhir/notify`**. They do **not** replace a live target for **OAuth2 client credentials** (#26), **`POST /Subscription`** on a real FHIR REST API, or an EHR-driven **rest-hook** round trip (#27). Vendor sandboxes (Epic, Cerner) are optional; the team still needs a **reproducible local or CI** target to demo and regression-test that slice.
+
+**Plan — implement at least one of:**
+
+1. **Reference FHIR server in Docker** — e.g. [HAPI FHIR](https://hapifhir.io/) (R4-capable JPA server) or another maintained R4 image. Prefer an **optional** Compose profile (e.g. `docker compose --profile fhir up`) so default `docker compose up` stays unchanged for tracks that only need agents + API stubs. Document how dev credentials map to `FHIR_BASE_URL`, `FHIR_TOKEN_URL`, `FHIR_CLIENT_ID`, and `FHIR_CLIENT_SECRET`.
+2. **Minimal in-repo stub** — a small HTTP service (or scripted pytest + `httpx` ASGI test app) that implements **only** the endpoints Shadi calls today (token endpoint, `POST` / `DELETE Subscription`) and can **POST** a signed notification body to `NOTIFICATION_ENDPOINT` for demos or CI. Useful when a full FHIR server is too heavy for a given environment.
+
+**Explicitly not required** for: agent development (`MOCK_LLM`), `bundle_to_case` correctness, dashboard report UI (static fixtures / MSW), or `POST /cases` with a pasted bundle.
+
+**Success criteria:** A new contributor can follow README + `.env.example` to run **either** (a) reference server + Shadi MCP enabled, or (b) stub + Shadi, and observe **subscription registration** and **at least one** inbound notify → normalize → enqueue path without Epic/Cerner credentials.
 
 ---
 
@@ -116,6 +134,7 @@ These are the moments when two tracks need to sync:
 Each track owner can begin these tasks immediately with zero cross-track dependencies:
 
 - **Noah**: implement `FHIRNormalizer.bundle_to_case()` (#28) — pure Python, no services required
+- **Noah** (when #26 / #27 are in scope): add **local FHIR reference server or minimal EHR stub** (see **Planned: Local FHIR or EHR stub (#25)** below) — not a day-one blocker for agents or fixture-based tests
 - **Emmanuel**: add `router = APIRouter()` to `api/routes/cases.py` and `api/routes/reports.py` to fix the startup import crash, then wire the lifespan (#31)
 - **Joshua**: implement the six agent classes (#36) — subclass `BaseAgent`, write prompts, set `inference_url` and `model` class attributes
 - **Ericsen**: run `bunx create-next-app` and scaffold the app (#41) — zero dependencies

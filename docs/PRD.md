@@ -2,10 +2,13 @@
 
 <!-- One checkbox per requirement. Format: - [x] Outcome title <!-- prd:ID --> -->
 
+Progress is tracked per owner. Check boxes are synced automatically by Cursor Automation when PRs declare `PRD: <ID>` in their body.
+
 ---
 
 ## Frontend (Ericsen) — FE-*
 
+- [x] PR template updated to reference Cursor Automation for PRD sync <!-- prd:FE-001 -->
 - [x] Role-selection landing page with Nurse and Doctor chooser cards <!-- prd:nurse-role-selection -->
 - [x] Nurse triage intake form with chief-complaint validation and case submission <!-- prd:nurse-triage-form -->
 - [x] Doctor cases view with live status badges and New Case navigation <!-- prd:doctor-cases-view -->
