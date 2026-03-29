@@ -4,7 +4,7 @@
 
 ## PRD (automated checklist)
 
-If this PR completes product requirements, list their **IDs** (comma-separated). After merge to `main`, the [PRD sync workflow](.github/workflows/prd-sync.yml) will check those boxes in `docs/PRD.md`.
+If this PR completes product requirements, list their **IDs** (comma-separated). After merge to `main`, the Cursor Automation will check those boxes in `docs/PRD.md` automatically.
 
 ```text
 PRD:
