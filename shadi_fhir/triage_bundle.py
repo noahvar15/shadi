@@ -26,6 +26,15 @@ def build_triage_bundle(
     chief_complaint: str | None = None,
 ) -> dict[str, Any]:
     """Return a FHIR R4 ``collection`` Bundle dict suitable for :meth:`FHIRNormalizer.bundle_to_case`."""
+    pid = patient_id.strip()
+    eid = encounter_id.strip()
+    if not pid:
+        msg = "patient_id must be non-empty"
+        raise ValueError(msg)
+    if not eid:
+        msg = "encounter_id must be non-empty"
+        raise ValueError(msg)
+
     text = triage_text.strip()
     if not text:
         msg = "triage_text must be non-empty"
@@ -41,7 +50,7 @@ def build_triage_bundle(
             {
                 "resource": {
                     "resourceType": "Patient",
-                    "id": patient_id,
+                    "id": pid,
                     "gender": "unknown",
                 }
             },
@@ -57,7 +66,7 @@ def build_triage_bundle(
             {
                 "resource": {
                     "resourceType": "Observation",
-                    "id": f"{encounter_id}-hpi",
+                    "id": f"{eid}-hpi",
                     "status": "final",
                     "code": {
                         "coding": [
@@ -69,7 +78,7 @@ def build_triage_bundle(
                         ],
                         "text": "Triage narrative",
                     },
-                    "subject": {"reference": f"Patient/{patient_id}"},
+                    "subject": {"reference": f"Patient/{pid}"},
                     "valueString": text,
                 }
             },

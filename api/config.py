@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+if TYPE_CHECKING:
+    from shadi_fhir.mcp_server import FHIRMCPServer
 
 _PLACEHOLDER_API_SECRETS = frozenset(
     {
@@ -81,7 +85,7 @@ class Settings(BaseSettings):
         )
 
 
-def build_fhir_mcp_server(settings: Settings) -> "FHIRMCPServer":
+def build_fhir_mcp_server(settings: Settings) -> FHIRMCPServer:
     from shadi_fhir.mcp_server import FHIRMCPServer
 
     return FHIRMCPServer(

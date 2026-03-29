@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 
 router = APIRouter()
 
+# Upper bound for notification bundles (FHIR JSON); reject larger bodies to limit memory per request.
+MAX_FHIR_NOTIFY_BODY_BYTES = 5 * 1024 * 1024
+
 WEBHOOK_SIGNATURE_HEADER = "X-Shadi-Signature"
 WEBHOOK_SIGNATURE_PREFIX = "sha256="
 
@@ -80,8 +83,17 @@ async def fhir_notify(request: Request) -> dict[str, str]:
     Returns a minimal acknowledgment (not the full ``CaseObject``) to avoid exposing
     internal shapes to the EHR sender.
     """
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            if int(cl) > MAX_FHIR_NOTIFY_BODY_BYTES:
+                raise HTTPException(status_code=413, detail="Request body too large")
+        except ValueError:
+            pass
     settings = _get_settings(request)
     raw = await request.body()
+    if len(raw) > MAX_FHIR_NOTIFY_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="Request body too large")
     verify_fhir_webhook_body(
         raw,
         request.headers.get(WEBHOOK_SIGNATURE_HEADER),

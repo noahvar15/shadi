@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from agents.schemas import CaseObject
 from api.routes.fhir_routes import (
+    MAX_FHIR_NOTIFY_BODY_BYTES,
     WEBHOOK_SIGNATURE_HEADER,
     router,
     verify_fhir_webhook_body,
@@ -93,6 +94,28 @@ async def test_fhir_notify_returns_400_on_validation_error() -> None:
 
     assert r.status_code == 400
     assert "Patient" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_fhir_notify_returns_413_when_content_length_too_large() -> None:
+    app = FastAPI()
+    app.include_router(router, prefix="/fhir")
+    app.state.settings = MagicMock(fhir_webhook_secret="notify-secret")
+    app.state.fhir_mcp = MagicMock()
+
+    body = b"{}"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post(
+            "/fhir/notify",
+            content=body,
+            headers={
+                "content-length": str(MAX_FHIR_NOTIFY_BODY_BYTES + 1),
+                WEBHOOK_SIGNATURE_HEADER: _sign(body, "notify-secret"),
+            },
+        )
+
+    assert r.status_code == 413
 
 
 @pytest.mark.asyncio
