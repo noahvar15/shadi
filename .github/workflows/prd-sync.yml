@@ -1,0 +1,48 @@
+# Sync docs/PRD.md checkboxes when a PR merges to main.
+# Works for any merge (GitHub UI, git CLI, GraphQL, etc.): contributors add
+#   PRD: FE-001, API-002
+# to the PR description. Cursor is not required.
+#
+# Does not use an LLM — deterministic parsing only.
+
+name: PRD sync
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+concurrency:
+  group: prd-sync-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Update PRD from merged PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 scripts/sync_prd.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- docs/PRD.md; then
+            echo "No PRD changes; exiting."
+            exit 0
+          fi
+          git add docs/PRD.md
+          git commit -m "chore(docs): sync PRD checkboxes (PR #${{ github.event.pull_request.number }})"
+          git push origin HEAD:main
