@@ -62,6 +62,7 @@ const MOCK_REPORT: DifferentialReport = {
   status: 'complete',
   consensus_level: 0.9,
   divergent_agents: [],
+  completed_at: new Date(Date.now() - 1800_000).toISOString(),
   top_diagnoses: [
     {
       rank: 1,
