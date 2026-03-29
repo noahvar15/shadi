@@ -227,7 +227,12 @@ describe('POST /api/cases/:id/feedback — doctor triage feedback', () => {
     ).rejects.toMatchObject({ response: { status: 404 } })
   })
 
-  it('returns 422 for an invalid vote value', async () => {
+  it('accepts null to clear a previous vote', async () => {
+    const { data } = await api.post('/api/cases/CASE-DEMO-001/feedback', { vote: null })
+    expect(data.ok).toBe(true)
+  })
+
+  it('returns 422 for a completely invalid vote value', async () => {
     await expect(
       api.post('/api/cases/CASE-DEMO-001/feedback', { vote: 'maybe' }),
     ).rejects.toMatchObject({ response: { status: 422 } })

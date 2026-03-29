@@ -44,7 +44,7 @@ class NurseIntakePayload(BaseModel):
 
 
 class FeedbackPayload(BaseModel):
-    vote: Literal["up", "down"]
+    vote: Literal["up", "down"] | None = None
     note: str | None = None
 
 

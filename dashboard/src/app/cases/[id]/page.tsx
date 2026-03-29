@@ -49,16 +49,20 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
   const { id } = use(params)
   const [selectedDiagnosis, setSelectedDiagnosis] = useState<DiagnosisCandidate | null>(null)
   const [vote, setVote] = useState<'up' | 'down' | null>(null)
-  const [feedbackSent, setFeedbackSent] = useState(false)
 
   const feedbackMutation = useMutation({
-    mutationFn: (v: 'up' | 'down') =>
+    mutationFn: (v: 'up' | 'down' | null) =>
       api.post(`/api/cases/${id}/feedback`, { vote: v }).then((r) => r.data),
     onSuccess: (_data, v) => {
       setVote(v)
-      setFeedbackSent(true)
     },
   })
+
+  function handleVote(v: 'up' | 'down') {
+    // Clicking the active choice clears it; clicking the other switches.
+    const next = vote === v ? null : v
+    feedbackMutation.mutate(next)
+  }
 
   // TanStack Query handles cleanup on unmount automatically — no manual teardown needed.
   const { data: report, error, isLoading } = useQuery<DifferentialReport, Error>({
@@ -169,26 +173,27 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
           divergentAgents={report.divergent_agents}
         />
 
-        {/* Doctor feedback — thumbs up / down on the triage note */}
+        {/* Doctor feedback — toggleable thumbs up / down on the triage note */}
         <div className="flex items-center gap-4 p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl">
           <div className="flex-1">
             <p className="text-sm font-semibold text-[var(--foreground)]">
               Triage Assessment
             </p>
             <p className="text-xs text-[var(--foreground-muted)] mt-0.5">
-              {feedbackSent
-                ? vote === 'up'
-                  ? 'Marked as accurate — thank you.'
-                  : 'Flagged for review — thank you.'
+              {vote === 'up'
+                ? 'Marked as accurate — click again to clear.'
+                : vote === 'down'
+                ? 'Flagged for review — click again to clear.'
                 : 'Was the triage note accurate and complete?'}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => !feedbackSent && feedbackMutation.mutate('up')}
-              disabled={feedbackSent || feedbackMutation.isPending}
+              onClick={() => handleVote('up')}
+              disabled={feedbackMutation.isPending}
               aria-label="Triage accurate"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:cursor-not-allowed ${
+              aria-pressed={vote === 'up'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
                 vote === 'up'
                   ? 'bg-emerald-500 border-emerald-500 text-white'
                   : 'border-[var(--border)] text-[var(--foreground-muted)] hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400'
@@ -198,10 +203,11 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
               Accurate
             </button>
             <button
-              onClick={() => !feedbackSent && feedbackMutation.mutate('down')}
-              disabled={feedbackSent || feedbackMutation.isPending}
+              onClick={() => handleVote('down')}
+              disabled={feedbackMutation.isPending}
               aria-label="Triage needs review"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:cursor-not-allowed ${
+              aria-pressed={vote === 'down'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
                 vote === 'down'
                   ? 'bg-red-500 border-red-500 text-white'
                   : 'border-[var(--border)] text-[var(--foreground-muted)] hover:border-red-400 hover:text-red-500'

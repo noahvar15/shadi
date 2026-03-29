@@ -102,8 +102,8 @@ export const server = setupServer(
     if (!found) {
       return HttpResponse.json({ detail: 'Case not found' }, { status: 404 })
     }
-    if (body.vote !== 'up' && body.vote !== 'down') {
-      return HttpResponse.json({ detail: 'vote must be "up" or "down"' }, { status: 422 })
+    if (body.vote !== 'up' && body.vote !== 'down' && body.vote !== null) {
+      return HttpResponse.json({ detail: 'vote must be "up", "down", or null' }, { status: 422 })
     }
     return HttpResponse.json({ ok: true })
   }),
