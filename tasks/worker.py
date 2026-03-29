@@ -8,6 +8,7 @@ from arq.connections import RedisSettings
 
 from api.config import get_settings
 from api.db import close_pool, init_pool
+from config import settings as agent_settings
 from tasks.pipeline import run_diagnostic_pipeline
 
 
@@ -24,6 +25,7 @@ def _arq_worker_kwargs_filtered() -> dict[str, Any]:
         "queue_name": s.intake_queue,
         "on_startup": startup,
         "on_shutdown": shutdown,
+        "job_timeout": int(agent_settings.ARQ_JOB_TIMEOUT_SECONDS),
     }
     worker_args = set(signature(Worker).parameters.keys())
     return {k: v for k, v in snap.items() if k in worker_args}

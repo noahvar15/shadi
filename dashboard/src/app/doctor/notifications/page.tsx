@@ -30,7 +30,7 @@ const STATUS_META: Record<
     icon: <CheckCircle2 size={15} className="text-emerald-500" />,
     pill: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   },
-  running: {
+  processing: {
     label: 'Analysing',
     icon: <Loader2 size={15} className="text-amber-500 animate-spin" />,
     pill: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -40,8 +40,18 @@ const STATUS_META: Record<
     icon: <Clock size={15} className="text-slate-400" />,
     pill: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
   },
+  pending_enqueue: {
+    label: 'Pending',
+    icon: <Clock size={15} className="text-slate-400" />,
+    pill: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  },
   failed: {
     label: 'Failed',
+    icon: <XCircle size={15} className="text-red-500" />,
+    pill: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  },
+  enqueue_failed: {
+    label: 'Queue failed',
     icon: <XCircle size={15} className="text-red-500" />,
     pill: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   },

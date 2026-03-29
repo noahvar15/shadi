@@ -13,13 +13,14 @@ Focuses on:
 
 from __future__ import annotations
 
-import json
-
 from agents._llm import call_chat
 from agents.base import BaseAgent
 from agents.meditron_model_ids import specialist_chat_model
-from agents.schemas import CaseObject, DiagnosisCandidate, SpecialistResult
+from agents.schemas import CaseObject, SpecialistResult
+from agents.specialists._parse import parse_specialist_response
 from config import settings
+
+_DEBUG_LOG = "/home/yconic/Documents/shadi/.cursor/debug-4f5ee4.log"
 
 _SYSTEM_PROMPT = """\
 You are an attending pulmonologist. Analyse the patient case and generate a
@@ -97,16 +98,10 @@ class PulmonologyAgent(BaseAgent[SpecialistResult]):
             mock_domain=self.domain,
         )
 
-        payload: dict = json.loads(raw)
-
-        diagnoses = [
-            DiagnosisCandidate(**d) for d in payload.get("diagnoses", [])
-        ]
-
-        return SpecialistResult(
+        return parse_specialist_response(
+            raw,
             agent_name=self.name,
-            case_id=case.case_id,
             domain=self.domain,
-            diagnoses=diagnoses,
-            reasoning_trace=payload.get("reasoning_trace", ""),
+            case_id=case.case_id,
+            log_path=_DEBUG_LOG,
         )

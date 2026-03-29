@@ -1,7 +1,8 @@
 import axios, { isAxiosError } from 'axios'
 
-// Empty string = same-origin: requests go to Next.js which rewrites /api/* → FastAPI.
-// Set NEXT_PUBLIC_API_URL only for cross-origin deployments (e.g. separate domains).
+// Same-origin by default: browser requests hit Next.js, which rewrites /api/* → FastAPI.
+// NEXT_PUBLIC_API_URL is only set in vitest (for MSW interception) — never at runtime.
+// The backend URL for the server-side rewrite is API_URL in next.config.ts.
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || '',
   headers: { 'Content-Type': 'application/json' },

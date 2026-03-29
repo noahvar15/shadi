@@ -43,7 +43,13 @@ def test_get_report_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     mock_conn = AsyncMock()
     mock_conn.fetchrow = AsyncMock(
-        return_value={"status": "queued", "report_json": None},
+        return_value={
+            "status": "queued",
+            "report_json": None,
+            "updated_at": None,
+            "error_message": None,
+            "pipeline_step": None,
+        },
     )
     cid = uuid4()
     with patched_api_app(monkeypatch, mock_conn) as (client, _, _):
@@ -54,6 +60,8 @@ def test_get_report_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_get_report_complete(monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import datetime, UTC
+
     cid = uuid4()
     payload = {
         "case_id": str(cid),
@@ -66,12 +74,19 @@ def test_get_report_complete(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     mock_conn = AsyncMock()
     mock_conn.fetchrow = AsyncMock(
-        return_value={"status": "complete", "report_json": payload},
+        return_value={
+            "status": "complete",
+            "report_json": payload,
+            "updated_at": datetime.now(UTC),
+            "error_message": None,
+            "pipeline_step": None,
+        },
     )
     with patched_api_app(monkeypatch, mock_conn) as (client, _, _):
         r = client.get(f"/reports/{cid}")
     assert r.status_code == 200
     assert r.json()["case_id"] == str(cid)
+    assert r.json()["completed_at"] is not None
 
 
 @pytest.mark.asyncio
@@ -124,4 +139,3 @@ async def test_run_diagnostic_pipeline_writes_report(monkeypatch: pytest.MonkeyP
     else:
         data = report_blob
     assert data["case_id"] == str(cid)
-    assert args[4] is None

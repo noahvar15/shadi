@@ -46,10 +46,10 @@ function StatusIcon({ status }: { status: string }) {
   if (status === 'complete') {
     return <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
   }
-  if (status === 'running') {
+  if (status === 'processing') {
     return <Loader2 size={14} className="text-amber-500 shrink-0 animate-spin" />
   }
-  if (status === 'failed') {
+  if (status === 'failed' || status === 'enqueue_failed') {
     return <XCircle size={14} className="text-red-500 shrink-0" />
   }
   return <Clock size={14} className="text-slate-400 shrink-0" />
@@ -58,9 +58,11 @@ function StatusIcon({ status }: { status: string }) {
 function statusLabel(status: string): string {
   switch (status) {
     case 'complete': return 'Report ready'
-    case 'running': return 'Analysis running'
+    case 'processing': return 'Analysis running'
     case 'queued': return 'Queued'
+    case 'pending_enqueue': return 'Pending'
     case 'failed': return 'Pipeline failed'
+    case 'enqueue_failed': return 'Queue failed'
     default: return status
   }
 }

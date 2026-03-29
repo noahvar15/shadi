@@ -156,7 +156,7 @@ async def create_case_intake(
 
     try:
         await arq_redis.enqueue_job(
-            "tasks.pipeline.run_diagnostic_pipeline",
+            "run_diagnostic_pipeline",
             str(case.case_id),
             _queue_name=settings.intake_queue,
         )
@@ -225,7 +225,7 @@ async def create_case(
 
     try:
         await arq_redis.enqueue_job(
-            "tasks.pipeline.run_diagnostic_pipeline",
+            "run_diagnostic_pipeline",
             str(case.case_id),
             _queue_name=settings.intake_queue,
         )

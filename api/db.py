@@ -22,6 +22,7 @@ VALID_CASE_STATUSES: tuple[str, ...] = (
     "queued",
     "processing",
     "complete",
+    "failed",
 )
 
 _CHECK_VALUES_SQL = ", ".join(f"'{s}'" for s in VALID_CASE_STATUSES)
@@ -64,12 +65,13 @@ async def ensure_schema(pool: asyncpg.Pool) -> None:
             "CREATE INDEX IF NOT EXISTS idx_cases_created_at ON cases (created_at DESC)",
         )
 
-        # Constraint: duplicate-safe under concurrent ensure_schema (no pg_constraint TOCTOU).
+        # Constraint: replace-safe so new status values (e.g. 'failed') are picked up.
         # _CHECK_VALUES_SQL is built only from VALID_CASE_STATUSES literals.
         await conn.execute(  # noqa: S608
             f"""
             DO $$
             BEGIN
+              ALTER TABLE public.cases DROP CONSTRAINT IF EXISTS cases_status_check;
               ALTER TABLE public.cases ADD CONSTRAINT cases_status_check
                 CHECK (status IN ({_CHECK_VALUES_SQL}));
             EXCEPTION
@@ -112,6 +114,12 @@ async def ensure_schema(pool: asyncpg.Pool) -> None:
             ALTER TABLE public.cases
             ADD COLUMN IF NOT EXISTS feedback VARCHAR(8),
             ADD COLUMN IF NOT EXISTS feedback_note TEXT;
+        """)
+
+        # Pipeline progress tracking for the dashboard stepper.
+        await conn.execute("""
+            ALTER TABLE public.cases
+            ADD COLUMN IF NOT EXISTS pipeline_step VARCHAR(32);
         """)
 
     logger.info("db.schema.ready")

@@ -28,9 +28,9 @@ _PLACEHOLDER_API_SECRETS = frozenset(
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        # Try .env first (git-ignored personal override), then fall back to the
-        # committed .env.demo so teammates can run the stack without any manual cp.
-        env_file=[".env", ".env.demo"],
+        # .env.demo has defaults (committed); .env (git-ignored) overrides them.
+        # pydantic-settings gives priority to the LAST file in the list.
+        env_file=[".env.demo", ".env"],
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # DEP-1 (cross-track-dependencies): use until Noah #28 contract is merged in your fork
     stub_case_intake: bool = Field(default=False, validation_alias="SHADI_STUB_CASE_INTAKE")
     stub_patient_search: bool = Field(default=False, validation_alias="SHADI_STUB_PATIENT_SEARCH")
+    cors_origins: str = Field(
+        default="http://localhost:3000",
+        validation_alias="CORS_ORIGINS",
+    )
 
     @field_validator("api_secret_key", mode="after")
     @classmethod

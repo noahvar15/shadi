@@ -26,6 +26,12 @@ export interface DifferentialReport {
   consensus_level: number
   divergent_agents: string[]
   vetoed_recommendations: VetoedItem[]
+  /** ISO timestamp — populated when status is 'complete'. */
+  completed_at?: string | null
+  /** Error details when the pipeline failed. */
+  error_message?: string | null
+  /** Current pipeline stage (specialists, evidence, debate, synthesis, safety). */
+  pipeline_step?: string | null
 }
 
 export interface VetoedItem {

@@ -10,16 +10,26 @@ import { SafetyBanner } from '@/components/report/SafetyBanner'
 import { DebateSummary } from '@/components/report/DebateSummary'
 import { DifferentialList } from '@/components/report/DifferentialList'
 import { CitationPanel } from '@/components/report/CitationPanel'
+import { Stepper } from '@/components/ui/Stepper'
+
+const PIPELINE_STEPS = ['Specialists', 'Evidence', 'Debate', 'Synthesis', 'Safety']
+const STEP_INDEX: Record<string, number> = {
+  specialists: 0,
+  evidence: 1,
+  debate: 2,
+  synthesis: 3,
+  safety: 4,
+}
 
 function StatusText({ status }: { status: DifferentialReport['status'] | undefined }) {
-  if (!status || status === 'queued') {
+  if (!status || status === 'queued' || status === 'pending_enqueue') {
     return (
       <p className="text-sm text-slate-500 dark:text-slate-400">
         {status ? 'Queued — waiting for pipeline slot\u2026' : 'Loading\u2026'}
       </p>
     )
   }
-  if (status === 'running') {
+  if (status === 'processing') {
     return (
       <p className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -76,7 +86,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
   })
 
   const isInProgress =
-    isLoading || !report || report.status === 'queued' || report.status === 'running'
+    isLoading || !report || (report.status !== 'complete' && report.status !== 'failed')
 
   if (error) {
     return (
@@ -99,19 +109,50 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
             <ChevronLeft size={14} /> Cases
           </Link>
         </div>
-        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md p-5">
+        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md p-5 space-y-3">
           <p className="text-red-700 dark:text-red-300 font-medium text-sm">
             Diagnostic pipeline failed
           </p>
-          <p className="text-red-600 dark:text-red-400 text-sm mt-1">
-            The agent pipeline encountered an error processing this case. Please try resubmitting.
+          <p className="text-red-600 dark:text-red-400 text-sm">
+            The agent pipeline encountered an error processing this case.
+            {report.pipeline_step && (
+              <> Failed during the <span className="font-semibold">{report.pipeline_step}</span> stage.</>
+            )}
           </p>
+          {report.error_message && (
+            <details className="text-xs">
+              <summary className="text-red-600 dark:text-red-400 cursor-pointer hover:underline font-medium">
+                Show error details
+              </summary>
+              <pre className="mt-2 p-3 bg-red-100 dark:bg-red-900/40 rounded text-red-800 dark:text-red-300 whitespace-pre-wrap overflow-x-auto font-mono max-h-48 overflow-y-auto">
+                {report.error_message}
+              </pre>
+            </details>
+          )}
+          <div className="flex gap-3 pt-1">
+            <Link
+              href="/nurse"
+              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              Resubmit Case
+            </Link>
+            <Link
+              href="/doctor"
+              className="px-4 py-2 border border-[var(--border)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] text-sm font-medium rounded-lg transition-colors"
+            >
+              Back to Cases
+            </Link>
+          </div>
         </div>
       </div>
     )
   }
 
   if (isInProgress) {
+    const currentStep = report?.pipeline_step
+      ? STEP_INDEX[report.pipeline_step] ?? 0
+      : 0
+
     return (
       <>
         <div className="flex items-center gap-2 px-6 py-3 border-b border-[var(--border)]">
@@ -120,13 +161,19 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
           </Link>
         </div>
 
-        {/* Full-width indeterminate progress bar — sits at very top of page */}
+        {/* Full-width indeterminate progress bar */}
         <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 overflow-hidden">
           <div className="h-full bg-emerald-500 animate-[progressBar_1.5s_ease-in-out_infinite]" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
           <StatusText status={report?.status} />
+
+          {report?.status === 'processing' && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
+              <Stepper steps={PIPELINE_STEPS} currentStep={currentStep} />
+            </div>
+          )}
 
           {/* Skeleton cards */}
           {[0, 1, 2].map((i) => (
@@ -153,11 +200,11 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
 
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
         {/* Page header */}
-        <header className="space-y-1">
+        <header className="space-y-2">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
             Diagnostic Report
           </h1>
-          <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400 flex-wrap">
             <span>
               Case{' '}
               <span className="font-mono text-slate-700 dark:text-slate-300">{report.case_id}</span>
@@ -165,6 +212,12 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
             {report.completed_at && (
               <span>Completed {formatTimestamp(report.completed_at)}</span>
             )}
+            <Link
+              href={`/cases/${id}/triage`}
+              className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium"
+            >
+              View Triage Note →
+            </Link>
           </div>
         </header>
 

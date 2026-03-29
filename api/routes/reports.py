@@ -35,6 +35,9 @@ class ReportResponse(BaseModel):
     consensus_level: float = 0.0
     divergent_agents: list[str] = []
     vetoed_recommendations: list[VetoDecision] = []
+    completed_at: str | None = None
+    error_message: str | None = None
+    pipeline_step: str | None = None
 
 
 @router.get("/{case_id}/status")
@@ -59,16 +62,24 @@ async def get_report(case_id: UUID, pool: PoolDep) -> ReportResponse:
     """
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT report_json, status FROM cases WHERE id = $1",
+            "SELECT report_json, status, updated_at, error_message, pipeline_step FROM cases WHERE id = $1",
             case_id,
         )
     if row is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
     status: str = row["status"]
+    completed_at: str | None = None
+    if status == "complete" and row["updated_at"]:
+        completed_at = row["updated_at"].isoformat() if hasattr(row["updated_at"], "isoformat") else str(row["updated_at"])
 
     if status != "complete" or row["report_json"] is None:
-        return ReportResponse(case_id=str(case_id), status=status)
+        return ReportResponse(
+            case_id=str(case_id),
+            status=status,
+            error_message=row["error_message"],
+            pipeline_step=row["pipeline_step"],
+        )
 
     report_data: dict[str, Any] = (
         json.loads(row["report_json"])
@@ -82,4 +93,7 @@ async def get_report(case_id: UUID, pool: PoolDep) -> ReportResponse:
         consensus_level=report_data.get("consensus_level", 0.0),
         divergent_agents=report_data.get("divergent_agents", []),
         vetoed_recommendations=report_data.get("vetoed_recommendations", []),
+        completed_at=completed_at,
+        error_message=row["error_message"],
+        pipeline_step=row["pipeline_step"],
     )
