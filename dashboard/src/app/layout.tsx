@@ -3,7 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/providers'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
-import { LayoutGrid, FolderPlus, FileText, Settings, HelpCircle } from 'lucide-react'
+import { Home, Stethoscope, ClipboardList, Settings, HelpCircle } from 'lucide-react'
 import Link from 'next/link'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -14,9 +14,9 @@ export const metadata: Metadata = {
 }
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Cases', icon: LayoutGrid },
-  { href: '/cases/new', label: 'New Case', icon: FolderPlus },
-  { href: '/reports', label: 'Reports', icon: FileText },
+  { href: '/',       label: 'Home',   icon: Home },
+  { href: '/nurse',  label: 'Nurse',  icon: Stethoscope },
+  { href: '/doctor', label: 'Doctor', icon: ClipboardList },
 ]
 
 const NAV_SECONDARY = [

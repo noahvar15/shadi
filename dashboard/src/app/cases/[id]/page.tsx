@@ -2,7 +2,8 @@
 
 import { use, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ChevronLeft } from 'lucide-react'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import type { DifferentialReport, DiagnosisCandidate } from '@/types/report'
 import { SafetyBanner } from '@/components/report/SafetyBanner'
@@ -76,6 +77,12 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
   if (isInProgress) {
     return (
       <>
+        <div className="flex items-center gap-2 px-6 py-3 border-b border-[var(--border)]">
+          <Link href="/doctor" className="text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] flex items-center gap-1 transition-colors">
+            <ChevronLeft size={14} /> Cases
+          </Link>
+        </div>
+
         {/* Full-width indeterminate progress bar — sits at very top of page */}
         <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 overflow-hidden">
           <div className="h-full bg-emerald-500 animate-[progressBar_1.5s_ease-in-out_infinite]" />
@@ -99,6 +106,12 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
 
   return (
     <>
+      <div className="flex items-center gap-2 px-6 py-3 border-b border-[var(--border)]">
+        <Link href="/doctor" className="text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] flex items-center gap-1 transition-colors">
+          <ChevronLeft size={14} /> Cases
+        </Link>
+      </div>
+
       <SafetyBanner vetoedRecommendations={report.vetoed_recommendations} />
 
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
