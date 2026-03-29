@@ -71,7 +71,16 @@ class FHIRMCPServer:
         token = body.get("access_token")
         if not token or not isinstance(token, str):
             raise FHIRAuthError("OAuth token response missing access_token")
-        expires_in = float(body.get("expires_in", 300))
+        raw_expires = body.get("expires_in", 300)
+        try:
+            expires_in = float(raw_expires)
+        except (TypeError, ValueError):
+            logger.warning("fhir.oauth.invalid_expires_in", value=raw_expires)
+            expires_in = 300.0
+        if expires_in <= 0:
+            logger.warning("fhir.oauth.nonpositive_expires_in", value=raw_expires)
+            expires_in = 300.0
+        expires_in = max(60.0, expires_in)
         self._access_token = token
         self._token_deadline_monotonic = time.monotonic() + expires_in
         logger.info("fhir.oauth.token_ok", expires_in=expires_in)
@@ -100,6 +109,7 @@ class FHIRMCPServer:
         payload = {
             "resourceType": "Subscription",
             "status": "active",
+            "reason": "Notify Shadi when an Encounter reaches arrived status for intake processing",
             "criteria": "Encounter?status=arrived",
             "channel": {
                 "type": "rest-hook",
@@ -162,7 +172,11 @@ class FHIRMCPServer:
                         subscription_id=self._subscription_id,
                     )
             except Exception as exc:
-                logger.warning("fhir.subscription.delete_exception", error=str(exc))
+                logger.warning(
+                    "fhir.subscription.delete_exception",
+                    exc_type=type(exc).__name__,
+                    error=str(exc),
+                )
         self._subscription_id = None
         if self._arq is not None:
             try:
