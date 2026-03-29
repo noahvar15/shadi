@@ -87,7 +87,6 @@ pytest tests/
 ## Rules
 
 - **All architectural decisions go in `docs/decisions/` first.** See `adr-001-architecture.md` for format. Do not change the agent pipeline, model strategy, A2A protocol, or safety veto behavior without an ADR.
-- **`docs/PRD.md` is the canonical product requirements checklist.** If a PR completes one or more listed requirements, include a `PRD:` line in the PR body with explicit IDs such as `PRD: FE-001, API-002`. Empty or missing `PRD:` lines cause no checkbox updates. IDs must match the `<!-- prd:... -->` markers in `docs/PRD.md`.
 - **PHI never leaves the machine.** No cloud API calls for inference. No logging of patient data.
 - **Safety veto is non-negotiable.** Changes to `agents/safety/` require explicit review. The veto must fire before any output reaches the dashboard.
 - Run `pytest` before claiming any fix or feature is complete.
@@ -150,4 +149,5 @@ Agents communicate via structured messages in `a2a/`. Valid message types: `ENDO
 - Subagent model routing: `planner` → `claude-4.6-sonnet-medium-thinking` (strategic decomposition); `worker` → `gpt-5.4-medium` (Python agents, FHIR, A2A, API, models, infra — never `dashboard/`); `ui-engineer` → `claude-sonnet-4-6` (all work inside `dashboard/` exclusively); `reviewer` → `claude-opus-4-6` (verification and code review).
 - Project-level skills for team sharing live in `.agents/skills/` (committed to git). `.cursor/` is gitignored. `.claude/skills/` is not used — the team does not use Claude.
 - Dashboard design system (defined in `tailwind.config.ts` on the scaffold branch, inherited by all downstream issues): Vercel/Linear aesthetic; Tailwind `darkMode: 'class'`; slate-950/white base; emerald-400/500 primary accent (high confidence, CTAs); red-500/600 safety veto/danger; amber-400/500 warnings/divergent agents; monospace for clinical scores and numbers, sans-serif for prose.
-- Dashboard issue dependency order: #41 (scaffold) must merge before #42 (case intake) and #43 (report view); #43 must merge before #44 (live updates).
+- Dashboard routing (established in issue #69, which superseded #42/#43/#44): `/` = role-selection landing (Nurse vs Doctor); `/nurse` = triage intake form (chief complaint → `POST /cases`); `/doctor` = cases list with report cards and live agent progress.
+- Next.js hydration rule: never nest the layout shell (`<div>`, `<aside>`, `<header>`) inside a `'use client'` Providers component — only wrap `{children}` with QueryClientProvider/providers to avoid RSC serialization mismatches in Next.js 15 + React 19.
