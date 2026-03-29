@@ -15,6 +15,8 @@ import json
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Request
+from fhir.resources.bundle import Bundle
+from pydantic import ValidationError
 
 from shadi_fhir.exceptions import FHIRValidationError
 
@@ -31,9 +33,17 @@ WEBHOOK_SIGNATURE_PREFIX = "sha256="
 
 
 def _constant_time_hex_eq(a: str, b: str) -> bool:
-    if len(a) != len(b):
+    """Compare two lowercase hex strings in (mostly) constant time.
+
+    Avoid a length-based early return: that leaks whether the candidate matches
+    the expected digest length. :func:`hmac.compare_digest` requires equal
+    lengths and raises ``ValueError`` otherwise; treat that as mismatch without
+    branching on ``len()`` first.
+    """
+    try:
+        return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+    except ValueError:
         return False
-    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
 
 
 def verify_fhir_webhook_body(raw_body: bytes, signature_header: str | None, secret: str) -> None:
@@ -72,6 +82,18 @@ def _get_settings(request: Request):
     return settings
 
 
+async def _read_request_body_limited(request: Request, max_bytes: int) -> bytes:
+    """Read the body while enforcing ``max_bytes`` without buffering past the limit."""
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=413, detail="Request body too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @router.post("/notify")
 async def fhir_notify(request: Request) -> dict[str, str]:
     """Rest-hook endpoint for FHIR Subscription notifications (Encounter).
@@ -91,9 +113,7 @@ async def fhir_notify(request: Request) -> dict[str, str]:
         except ValueError:
             pass
     settings = _get_settings(request)
-    raw = await request.body()
-    if len(raw) > MAX_FHIR_NOTIFY_BODY_BYTES:
-        raise HTTPException(status_code=413, detail="Request body too large")
+    raw = await _read_request_body_limited(request, MAX_FHIR_NOTIFY_BODY_BYTES)
     verify_fhir_webhook_body(
         raw,
         request.headers.get(WEBHOOK_SIGNATURE_HEADER),
@@ -105,6 +125,10 @@ async def fhir_notify(request: Request) -> dict[str, str]:
         raise HTTPException(status_code=400, detail="Request body must be valid JSON") from exc
     if not isinstance(bundle, dict):
         raise HTTPException(status_code=400, detail="FHIR notification must be a JSON object")
+    try:
+        Bundle.model_validate(bundle)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     mcp = _get_mcp(request)
     try:

@@ -145,7 +145,7 @@ def create_app() -> FastAPI:
         }
         try:
             detail["shadi_body"] = r.json()
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             detail["shadi_text"] = r.text[:500]
 
         if not r.is_success:

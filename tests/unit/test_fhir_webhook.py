@@ -136,6 +136,25 @@ async def test_fhir_notify_returns_400_on_invalid_json() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fhir_notify_returns_400_when_json_is_not_a_fhir_bundle() -> None:
+    """Webhook rejects valid JSON that is not a FHIR Bundle (fhir.resources validation)."""
+    app = FastAPI()
+    app.include_router(router, prefix="/fhir")
+    app.state.settings = MagicMock(fhir_webhook_secret="notify-secret")
+    app.state.fhir_mcp = MagicMock()
+
+    body = b'{"resourceType":"Patient","id":"pat-1"}'
+    headers = {WEBHOOK_SIGNATURE_HEADER: _sign(body, "notify-secret")}
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post("/fhir/notify", content=body, headers=headers)
+
+    assert r.status_code == 400
+    assert "Bundle" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_enqueue_intake_case_passes_stable_job_id() -> None:
     case = CaseObject(
         patient_id="P1",
@@ -148,6 +167,6 @@ async def test_enqueue_intake_case_passes_stable_job_id() -> None:
     redis = MagicMock()
     redis.enqueue_job = AsyncMock()
     await enqueue_intake_case(redis, case)
-    redis.enqueue_job.assert_called_once()
+    redis.enqueue_job.assert_awaited_once()
     assert redis.enqueue_job.call_args[0][0] == "run_intake"
     assert redis.enqueue_job.call_args.kwargs["_job_id"] == "intake:P1:E1"
