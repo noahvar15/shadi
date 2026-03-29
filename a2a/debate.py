@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import UTC, datetime
 from uuid import UUID
 
 from a2a.protocol import A2AMessage, DebateRound, MessageIntent
@@ -35,8 +36,7 @@ class DebateManager:
     def close_round(self) -> DebateRound:
         if self._current is None:
             raise RuntimeError("No open debate round")
-        from datetime import datetime
-        self._current.closed_at = datetime.utcnow()
+        self._current.closed_at = datetime.now(UTC)
         self._rounds.append(self._current)
         closed = self._current
         self._current = None

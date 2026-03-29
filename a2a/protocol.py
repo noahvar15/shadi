@@ -14,12 +14,16 @@ which diagnoses were challenged without rebuttal (divergence).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Annotated
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, model_validator
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 class MessageIntent(str, Enum):
@@ -45,7 +49,7 @@ class A2AMessage(BaseModel):
     """
 
     message_id: UUID = Field(default_factory=uuid4)
-    sent_at: datetime = Field(default_factory=datetime.utcnow)
+    sent_at: datetime = Field(default_factory=_utc_now)
 
     # Routing
     sender: str          # agent name, e.g. "cardiology"
@@ -80,7 +84,7 @@ class DebateRound(BaseModel):
     round_number: int
     case_id: UUID
     messages: list[A2AMessage] = Field(default_factory=list)
-    started_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=_utc_now)
     closed_at: datetime | None = None
 
     @property
