@@ -36,14 +36,21 @@ function PatientList() {
 
   useEffect(() => {
     let cancelled = false
-    api
-      .get<PatientEntry[]>('/api/cases')
-      .then(({ data }) => {
-        if (!cancelled) setPatients(data.slice(0, 10))
-      })
-      .catch(() => {})
+    // Small delay so MSW's service worker finishes registering before the
+    // first fetch fires — AppSidebar renders outside <Providers> and therefore
+    // doesn't benefit from the "wait for MSW" gate in providers.tsx.
+    const timer = setTimeout(() => {
+      api
+        .get<PatientEntry[]>('/api/cases')
+        .then(({ data }) => {
+          if (!cancelled && Array.isArray(data)) setPatients(data.slice(0, 10))
+        })
+        .catch(() => {})
+    }, 300)
+
     return () => {
       cancelled = true
+      clearTimeout(timer)
     }
   }, [])
 
