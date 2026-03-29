@@ -37,6 +37,7 @@ class ReportResponse(BaseModel):
     vetoed_recommendations: list[VetoDecision] = []
     completed_at: str | None = None
     error_message: str | None = None
+    pipeline_step: str | None = None
 
 
 @router.get("/{case_id}/status")
@@ -61,7 +62,7 @@ async def get_report(case_id: UUID, pool: PoolDep) -> ReportResponse:
     """
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT report_json, status, updated_at, error_message FROM cases WHERE id = $1",
+            "SELECT report_json, status, updated_at, error_message, pipeline_step FROM cases WHERE id = $1",
             case_id,
         )
     if row is None:
@@ -77,6 +78,7 @@ async def get_report(case_id: UUID, pool: PoolDep) -> ReportResponse:
             case_id=str(case_id),
             status=status,
             error_message=row["error_message"],
+            pipeline_step=row["pipeline_step"],
         )
 
     report_data: dict[str, Any] = (
@@ -93,4 +95,5 @@ async def get_report(case_id: UUID, pool: PoolDep) -> ReportResponse:
         vetoed_recommendations=report_data.get("vetoed_recommendations", []),
         completed_at=completed_at,
         error_message=row["error_message"],
+        pipeline_step=row["pipeline_step"],
     )

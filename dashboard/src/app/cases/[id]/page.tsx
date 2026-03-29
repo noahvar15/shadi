@@ -10,6 +10,16 @@ import { SafetyBanner } from '@/components/report/SafetyBanner'
 import { DebateSummary } from '@/components/report/DebateSummary'
 import { DifferentialList } from '@/components/report/DifferentialList'
 import { CitationPanel } from '@/components/report/CitationPanel'
+import { Stepper } from '@/components/ui/Stepper'
+
+const PIPELINE_STEPS = ['Specialists', 'Evidence', 'Debate', 'Synthesis', 'Safety']
+const STEP_INDEX: Record<string, number> = {
+  specialists: 0,
+  evidence: 1,
+  debate: 2,
+  synthesis: 3,
+  safety: 4,
+}
 
 function StatusText({ status }: { status: DifferentialReport['status'] | undefined }) {
   if (!status || status === 'queued' || status === 'pending_enqueue') {
@@ -112,6 +122,10 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
   }
 
   if (isInProgress) {
+    const currentStep = report?.pipeline_step
+      ? STEP_INDEX[report.pipeline_step] ?? 0
+      : 0
+
     return (
       <>
         <div className="flex items-center gap-2 px-6 py-3 border-b border-[var(--border)]">
@@ -120,13 +134,19 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
           </Link>
         </div>
 
-        {/* Full-width indeterminate progress bar — sits at very top of page */}
+        {/* Full-width indeterminate progress bar */}
         <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 overflow-hidden">
           <div className="h-full bg-emerald-500 animate-[progressBar_1.5s_ease-in-out_infinite]" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+        <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
           <StatusText status={report?.status} />
+
+          {report?.status === 'processing' && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6">
+              <Stepper steps={PIPELINE_STEPS} currentStep={currentStep} />
+            </div>
+          )}
 
           {/* Skeleton cards */}
           {[0, 1, 2].map((i) => (

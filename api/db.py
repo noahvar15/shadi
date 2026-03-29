@@ -116,6 +116,12 @@ async def ensure_schema(pool: asyncpg.Pool) -> None:
             ADD COLUMN IF NOT EXISTS feedback_note TEXT;
         """)
 
+        # Pipeline progress tracking for the dashboard stepper.
+        await conn.execute("""
+            ALTER TABLE public.cases
+            ADD COLUMN IF NOT EXISTS pipeline_step VARCHAR(32);
+        """)
+
     logger.info("db.schema.ready")
 
 

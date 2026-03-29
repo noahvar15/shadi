@@ -30,6 +30,8 @@ export interface DifferentialReport {
   completed_at?: string | null
   /** Error details when the pipeline failed. */
   error_message?: string | null
+  /** Current pipeline stage (specialists, evidence, debate, synthesis, safety). */
+  pipeline_step?: string | null
 }
 
 export interface VetoedItem {

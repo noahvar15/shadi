@@ -44,19 +44,27 @@ async def run_diagnostic_pipeline(ctx: dict[str, Any], case_id: str) -> None:
 
     case = _parse_case_payload(row["case_json"])
 
+    async def set_step(step: str) -> None:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE cases SET pipeline_step = $2, updated_at = NOW() WHERE id = $1",
+                cid, step,
+            )
+
     async with pool.acquire() as conn:
         await conn.execute(
             """
             UPDATE cases
-            SET status = $2, error_message = NULL, updated_at = NOW()
+            SET status = $2, pipeline_step = $3, error_message = NULL, updated_at = NOW()
             WHERE id = $1
             """,
             cid,
             "processing",
+            "specialists",
         )
 
     try:
-        report = await Orchestrator().run(case)
+        report = await Orchestrator().run(case, on_step=set_step)
     except Exception as exc:  # noqa: BLE001
         log.error("pipeline.orchestrator_failed", err=str(exc), exc_info=True)
         error_tb = traceback.format_exc()

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 
 import structlog
 from pydantic import ValidationError
@@ -69,11 +70,20 @@ class Orchestrator:
         self._evidence_agent: EvidenceAgent = evidence_agent or EvidenceAgent()
         self._safety_agent: SafetyVetoAgent = safety_agent or SafetyVetoAgent()
 
-    async def run(self, case: CaseObject) -> DifferentialReport:
+    async def run(
+        self,
+        case: CaseObject,
+        on_step: Callable[[str], Awaitable[None]] | None = None,
+    ) -> DifferentialReport:
         log = logger.bind(case_id=str(case.case_id))
         log.info("orchestrator.run.start")
 
+        async def _step(name: str) -> None:
+            if on_step:
+                await on_step(name)
+
         # ── 1. Specialist reasoning (parallel or sequential — see SPECIALISTS_PARALLEL) ─
+        await _step("specialists")
         if settings.SPECIALISTS_PARALLEL:
             raw_results = await asyncio.gather(
                 *[agent.run(case) for agent in self._specialists],
@@ -108,6 +118,7 @@ class Orchestrator:
         log.info("orchestrator.specialists.done", count=len(specialist_results))
 
         # ── 2. Evidence grounding ──────────────────────────────────────────────
+        await _step("evidence")
         try:
             evidence_result = await self._evidence_agent.run(case, list(specialist_results))
         except Exception as exc:
@@ -122,6 +133,7 @@ class Orchestrator:
         log.info("orchestrator.evidence.done", grounded=len(evidence_result.grounded_diagnoses))
 
         # ── 3. A2A debate ─────────────────────────────────────────────────────
+        await _step("debate")
         debate = DebateManager(case_id=case.case_id)
         round_ = debate.open_round()
         for sr in specialist_results:
@@ -162,6 +174,7 @@ class Orchestrator:
         )
 
         # ── 4. Synthesis ──────────────────────────────────────────────────────
+        await _step("synthesis")
         synthesis_user = json.dumps({
             "specialist_diagnoses": [
                 {
@@ -214,6 +227,7 @@ class Orchestrator:
         )
 
         # ── 5. Safety veto ────────────────────────────────────────────────────
+        await _step("safety")
         # Runs after synthesis so it can inspect the assembled recommendations.
         # If any decision is vetoed, the vetoed items are recorded on the report
         # and a warning is logged; the orchestrator caller decides whether to halt.
