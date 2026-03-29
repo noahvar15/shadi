@@ -200,11 +200,11 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
 
       <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
         {/* Page header */}
-        <header className="space-y-1">
+        <header className="space-y-2">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
             Diagnostic Report
           </h1>
-          <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400 flex-wrap">
             <span>
               Case{' '}
               <span className="font-mono text-slate-700 dark:text-slate-300">{report.case_id}</span>
@@ -212,6 +212,12 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
             {report.completed_at && (
               <span>Completed {formatTimestamp(report.completed_at)}</span>
             )}
+            <Link
+              href={`/cases/${id}/triage`}
+              className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium"
+            >
+              View Triage Note →
+            </Link>
           </div>
         </header>
 
