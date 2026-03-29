@@ -2,7 +2,7 @@
 
 **Multi-agent clinical diagnostic reasoning system for emergency medicine.**
 
-A patient case arrives from the EHR via FHIR R4. Five specialist agents — each running a domain-specific LoRA adapter on a shared 70B base model — reason independently over the case, debate via a structured A2A protocol, and produce a ranked differential diagnosis with confidence scores, evidence citations, and a safety veto layer. The attending physician receives this before walking into the room.
+A patient case arrives from the EHR via FHIR R4. An **intake** agent turns unstructured triage text into a structured `CaseObject` (SNOMED CT, LOINC, RxNorm). When imaging is attached, a **multimodal imaging** agent (MedGemma — separate from the clinical specialists) interprets those studies. **Four domain specialist agents** — cardiology, neurology, pulmonology, toxicology — each run a domain-specific LoRA adapter on one shared Meditron-70B load in vLLM; they reason in parallel, then **evidence grounding** checks claims against a local PubMed and guidelines corpus. An **orchestrator** runs the structured **A2A** debate (`ENDORSE` / `CHALLENGE` / `MODIFY`), synthesizes consensus and ranked differentials, and a **safety veto** agent blocks unsafe recommendations before anything reaches the physician dashboard or FHIR `DiagnosticReport` output.
 
 ---
 
@@ -14,40 +14,51 @@ Diagnostic errors in emergency medicine are estimated to affect 12 million patie
 
 ## Architecture
 
+Shadi is a **local, air-gapped** stack: two inference backends (vLLM for Meditron + LoRA specialists, Ollama for every other model), a FastAPI + arq worker surface, Postgres/pgvector for evidence retrieval, Redis for the job queue, and a Next.js physician dashboard. PHI never leaves the machine (see [ADR-001](docs/decisions/adr-001-architecture.md)).
+
+**Specialist count:** exactly **four** LoRA-backed domain agents (cardiology, neurology, pulmonology, toxicology). The imaging agent uses MedGemma on Ollama — it is a multimodal preprocessor-style component, not a fifth LoRA specialist.
+
 ```mermaid
 flowchart TD
     EHR["EHR (Epic / Cerner)"]
     MCP["FHIR R4 MCP Server\n(encounter subscription)"]
-    Intake["Intake Agent\n(SNOMED · LOINC · RxNorm)"]
+    Intake["Intake Agent\n(qwen2.5:7b · SNOMED · LOINC · RxNorm)"]
     CaseObj["CaseObject"]
 
-    Cardio["Cardiology Agent\n(LoRA adapter)"]
-    Neuro["Neurology Agent\n(LoRA adapter)"]
-    Pulm["Pulmonology Agent\n(LoRA adapter)"]
-    Tox["Toxicology Agent\n(LoRA adapter)"]
+    Img["Imaging Agent\n(MedGemma · optional if attachments)"]
 
-    Evidence["Evidence Grounding Agent\n(PubMed + guidelines corpus)"]
+    Cardio["Cardiology\n(LoRA on meditron:70b)"]
+    Neuro["Neurology\n(LoRA on meditron:70b)"]
+    Pulm["Pulmonology\n(LoRA on meditron:70b)"]
+    Tox["Toxicology\n(LoRA on meditron:70b)"]
+
+    Evidence["Evidence Grounding\n(embed + meditron claim eval)"]
     Debate["A2A Debate Round\n(ENDORSE · CHALLENGE · MODIFY)"]
-    Orchestrator["Orchestrator\n(consensus + divergence tracking)"]
-    Veto["Safety Veto Agent\n(meds · allergies · contraindications)"]
+    Orchestrator["Orchestrator synthesis\n(DeepSeek-R1)"]
+    Veto["Safety Veto\n(phi4:14b)"]
     Output["DiagnosticReport (FHIR)\n+ Physician Dashboard"]
 
     EHR --> MCP --> Intake --> CaseObj
+    CaseObj --> Img
     CaseObj --> Cardio & Neuro & Pulm & Tox
+    Img --> Evidence
     Cardio & Neuro & Pulm & Tox --> Evidence
     Evidence --> Debate --> Orchestrator --> Veto --> Output
 ```
 
-### Agent Pipeline
+### Agent pipeline (end-to-end)
 
-| Stage | Agent | Responsibility |
+| Stage | Component | Responsibility |
 |---|---|---|
+| 0 | **EHR → MCP** | Subscribe to encounters; deliver FHIR R4 bundles into the app |
 | 1 | **Intake** | Parse unstructured triage notes; extract SNOMED CT, LOINC, RxNorm codes; build `CaseObject` |
-| 2 | **Specialists ×4** | Cardiology, neurology, pulmonology, toxicology reason concurrently; no cross-talk yet |
-| 3 | **Evidence Grounding** | Each specialist's findings cross-referenced against local PubMed + clinical guidelines corpus; unsupported claims flagged |
-| 4 | **A2A Debate** | Agents exchange structured `ENDORSE / CHALLENGE / MODIFY` messages; orchestrator tracks consensus and divergence |
-| 5 | **Safety Veto** | Every recommended diagnostic step and treatment cross-checked against active medications, allergies, and contraindications; unsafe items blocked before output |
-| 6 | **Output Synthesis** | Top-5 ranked differential with confidence %, evidence citations, and next steps written as FHIR `DiagnosticReport`; surfaced on physician dashboard |
+| 2a | **Imaging (optional)** | If `imaging_attachments` exist, MedGemma interprets images; outputs structured findings (skipped when no attachments) |
+| 2b | **Specialists ×4 (LoRA)** | Cardiology, neurology, pulmonology, toxicology on shared `meditron:70b` with per-domain LoRA; reason concurrently; no cross-talk until debate |
+| 3 | **Evidence grounding** | Retrieve from local vector index; evaluate whether evidence supports each claim (embedding model + Meditron reuse for claim eval) |
+| 4 | **A2A debate** | Structured `ENDORSE / CHALLENGE / MODIFY` messages; orchestrator records consensus and divergence |
+| 5 | **Orchestrator synthesis** | Rank differential, confidence scores, reconcile disagreement (dedicated reasoning model — ADR-002) |
+| 6 | **Safety veto** | Cross-check diagnostics and treatments vs meds, allergies, contraindications; block unsafe items |
+| 7 | **Output** | Top-ranked differential with evidence ties; FHIR `DiagnosticReport`; physician dashboard |
 
 ---
 
@@ -163,7 +174,7 @@ shadi/
 ├── agents/
 │   ├── base.py                  # BaseAgent ABC
 │   ├── intake/                  # Triage note parsing → CaseObject
-│   ├── specialists/             # Cardiology, neurology, pulmonology, toxicology
+│   ├── specialists/             # Four LoRA specialists + image_agent (MedGemma)
 │   ├── evidence/                # PubMed + guidelines cross-reference
 │   ├── safety/                  # Safety veto agent
 │   └── orchestrator/            # Fan-out, A2A debate, synthesis
