@@ -23,7 +23,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(t===null&&d)){document.documentElement.classList.add('dark')}}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.classList.add('dark')}}catch(e){}})()`,
           }}
         />
       </head>
@@ -38,7 +38,7 @@ export default function RootLayout({
 
             {/* Page content — Providers wraps only page children so the layout
                 shell stays server-rendered and avoids SSR/client hydration mismatch */}
-            <main className="flex-1 overflow-y-auto">
+            <main className="flex-1 min-h-0 overflow-y-auto">
               <Providers>
                 {children}
               </Providers>

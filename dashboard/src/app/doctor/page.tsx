@@ -77,7 +77,7 @@ function CaseCard({ c }: { c: Case }) {
 export default function DoctorPage() {
   const { data, isLoading, error } = useQuery<Case[]>({
     queryKey: ['cases'],
-    queryFn: () => api.get<Case[]>('/cases').then((r) => r.data),
+    queryFn: () => api.get<Case[]>('/api/cases').then((r) => r.data),
     refetchInterval: (query) =>
       query.state.data?.some((c) => c.status === 'queued' || c.status === 'running')
         ? 2000

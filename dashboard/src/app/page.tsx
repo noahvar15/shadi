@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Stethoscope, ClipboardList, ArrowRight, ArrowLeft } from 'lucide-react'
+import { DarkModeToggle } from '@/components/DarkModeToggle'
 
 type Role = 'nurse' | 'doctor'
 type Step = 'select' | 'login'
@@ -48,7 +49,10 @@ export default function RolePage() {
   }
 
   return (
-    <div className="min-h-full flex flex-col items-center justify-center px-6 py-16">
+    <div className="relative min-h-full flex flex-col items-center justify-center px-6 py-16">
+      <div className="absolute top-4 right-4">
+        <DarkModeToggle />
+      </div>
       {step === 'select' && (
         <div className="w-full animate-fade-in">
           <div className="mb-10 text-center">

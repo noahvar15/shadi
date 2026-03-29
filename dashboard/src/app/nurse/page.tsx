@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ImagePlus, X } from 'lucide-react'
 import { api } from '@/lib/api'
 
 interface CreateCasePayload {
@@ -75,6 +75,9 @@ export default function NursePage() {
   const [pmhOther, setPmhOther] = useState(false)
   const [pmhOtherText, setPmhOtherText] = useState('')
 
+  // Clinical images
+  const [images, setImages] = useState<File[]>([])
+
   // Allergies / Medications
   const [noKnownAllergies, setNoKnownAllergies] = useState(false)
   const [allergies, setAllergies] = useState('')
@@ -141,6 +144,7 @@ export default function NursePage() {
 
     if (medications.trim()) lines.push(`Medications: ${medications.trim()}`)
     if (narrative.trim()) lines.push(`Narrative: ${narrative.trim()}`)
+    if (images.length) lines.push(`Attachments: ${images.map((f) => f.name).join(', ')}`)
 
     return lines.join('\n')
   }
@@ -163,7 +167,7 @@ export default function NursePage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-10">
+    <div className="max-w-3xl mx-auto px-6 pt-10 pb-4">
       <div className="mb-7">
         <h1 className="text-xl font-bold text-[var(--foreground)]">
           Triage Intake{nurseName ? ` — ${nurseName}` : ''}
@@ -490,6 +494,58 @@ export default function NursePage() {
               />
             </div>
           </div>
+        </div>
+
+        {/* Section 7 — Clinical Images */}
+        <div className={CARD}>
+          <h2 className={SECTION_HEADER}>Clinical Images</h2>
+          <p className="text-xs text-[var(--foreground-muted)] mb-3">
+            Optional — attach wound photos, rashes, ECG strips, or other visual findings.
+          </p>
+          <label className="flex flex-col items-center justify-center gap-2 w-full py-6 border-2 border-dashed border-[var(--border)] rounded-lg cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500 transition-colors bg-[var(--background)]">
+            <ImagePlus size={22} className="text-[var(--foreground-muted)]" strokeWidth={1.5} />
+            <span className="text-sm text-[var(--foreground-muted)]">
+              Click to upload images
+            </span>
+            <span className="text-xs text-[var(--foreground-muted)] opacity-70">
+              JPEG, PNG, HEIC — up to 10 MB each
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="sr-only"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? [])
+                setImages((prev) => {
+                  const existing = new Set(prev.map((f) => f.name))
+                  return [...prev, ...files.filter((f) => !existing.has(f.name))]
+                })
+                e.target.value = ''
+              }}
+            />
+          </label>
+          {images.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {images.map((file, i) => (
+                <li key={`${file.name}-${i}`} className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                  <ImagePlus size={14} className="text-emerald-500 shrink-0" />
+                  <span className="flex-1 truncate">{file.name}</span>
+                  <span className="text-xs text-[var(--foreground-muted)] shrink-0">
+                    {(file.size / 1024).toFixed(0)} KB
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
+                    className="text-[var(--foreground-muted)] hover:text-red-500 transition-colors"
+                    aria-label={`Remove ${file.name}`}
+                  >
+                    <X size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Error banner */}

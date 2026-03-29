@@ -52,7 +52,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
   // TanStack Query handles cleanup on unmount automatically — no manual teardown needed.
   const { data: report, error, isLoading } = useQuery<DifferentialReport, Error>({
     queryKey: ['report', id],
-    queryFn: () => api.get<DifferentialReport>(`/reports/${id}`).then((r) => r.data),
+    queryFn: () => api.get<DifferentialReport>(`/api/reports/${id}`).then((r) => r.data),
     // Stop polling once terminal (complete or failed); keep polling while queued/running.
     refetchInterval: (query) => {
       const s = query.state.data?.status
