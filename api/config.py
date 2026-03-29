@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # DEP-1 (cross-track-dependencies): use until Noah #28 contract is merged in your fork
     stub_case_intake: bool = Field(default=False, validation_alias="SHADI_STUB_CASE_INTAKE")
     stub_patient_search: bool = Field(default=False, validation_alias="SHADI_STUB_PATIENT_SEARCH")
+    cors_origins: str = Field(
+        default="http://localhost:3000",
+        validation_alias="CORS_ORIGINS",
+    )
 
     @field_validator("api_secret_key", mode="after")
     @classmethod
