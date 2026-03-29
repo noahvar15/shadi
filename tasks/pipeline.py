@@ -60,7 +60,7 @@ async def run_diagnostic_pipeline(ctx: dict[str, Any], case_id: str) -> None:
             """,
             cid,
             "processing",
-            "specialists",
+            "intake",
         )
 
     try:

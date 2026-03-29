@@ -35,8 +35,9 @@ class BaseAgent(ABC, Generic[TResult]):
     """Abstract base class for all Shadi agents.
 
     Subclasses must implement `reason`. The `run` method wraps `reason` with
-    timing, structured logging, and error normalization — subclasses should
-    not override `run`.
+    timing, structured logging, and error normalization. Most subclasses
+    should not override `run`; however, `EvidenceAgent` and `SafetyVetoAgent`
+    override it with extended signatures (additional required parameters).
 
     Class attributes
     ----------------

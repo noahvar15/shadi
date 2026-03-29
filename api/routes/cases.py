@@ -72,7 +72,7 @@ async def list_cases(pool: PoolDep) -> list[CaseSummary]:
             try:
                 case_data = json.loads(row["case_json"]) if isinstance(row["case_json"], str) else row["case_json"]
             except (json.JSONDecodeError, TypeError):
-                pass
+                logger.warning("cases.case_json_decode_failed", case_id=str(row["id"]))
         results.append(
             CaseSummary(
                 case_id=str(row["id"]),
@@ -100,7 +100,7 @@ async def get_case(case_id: UUID, pool: PoolDep) -> CaseSummary:
         try:
             case_data = json.loads(row["case_json"]) if isinstance(row["case_json"], str) else row["case_json"]
         except (json.JSONDecodeError, TypeError):
-            pass
+            logger.warning("cases.case_json_decode_failed", case_id=str(case_id))
     return CaseSummary(
         case_id=str(row["id"]),
         patient_id=case_data.get("patient_id", "unknown"),

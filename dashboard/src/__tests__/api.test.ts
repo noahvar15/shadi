@@ -120,7 +120,7 @@ describe('GET /api/cases — doctor active cases list', () => {
   })
 
   it('status values are valid pipeline states', async () => {
-    const VALID = new Set(['queued', 'running', 'complete', 'failed', 'pending_enqueue', 'enqueue_failed'])
+    const VALID = new Set(['queued', 'processing', 'complete', 'failed', 'pending_enqueue', 'enqueue_failed'])
     const { data } = await api.get<Array<{ status: string }>>('/api/cases')
 
     for (const c of data) {
@@ -236,5 +236,47 @@ describe('POST /api/cases/:id/feedback — doctor triage feedback', () => {
     await expect(
       api.post('/api/cases/CASE-DEMO-001/feedback', { vote: 'maybe' }),
     ).rejects.toMatchObject({ response: { status: 422 } })
+  })
+})
+
+// ─── Reports ─────────────────────────────────────────────────────────────────
+
+describe('GET /api/reports/:id — diagnostic report', () => {
+  it('returns a complete report with top_diagnoses for a completed case', async () => {
+    const { data } = await api.get('/api/reports/CASE-DEMO-001')
+    expect(data.status).toBe('complete')
+    expect(data.case_id).toBe('CASE-DEMO-001')
+    expect(Array.isArray(data.top_diagnoses)).toBe(true)
+    expect(data.top_diagnoses.length).toBeGreaterThan(0)
+    expect(data.top_diagnoses[0]).toHaveProperty('display')
+    expect(data.top_diagnoses[0]).toHaveProperty('confidence')
+    expect(typeof data.consensus_level).toBe('number')
+    expect(Array.isArray(data.divergent_agents)).toBe(true)
+    expect(Array.isArray(data.vetoed_recommendations)).toBe(true)
+  })
+
+  it('returns in-progress status with empty diagnoses for a processing case', async () => {
+    const { data } = await api.get('/api/reports/CASE-DEMO-002')
+    expect(data.status).toBe('processing')
+    expect(data.top_diagnoses).toEqual([])
+    expect(data.pipeline_step).toBeTruthy()
+  })
+
+  it('returns a complete fallback for an unknown case id', async () => {
+    const { data } = await api.get('/api/reports/CASE-UNKNOWN-999')
+    expect(data.status).toBe('complete')
+    expect(data.case_id).toBe('CASE-UNKNOWN-999')
+  })
+})
+
+describe('GET /api/reports/:id/status — report status', () => {
+  it('returns status for a completed case', async () => {
+    const { data } = await api.get('/api/reports/CASE-DEMO-001/status')
+    expect(data.status).toBe('complete')
+  })
+
+  it('returns processing status for an in-progress case', async () => {
+    const { data } = await api.get('/api/reports/CASE-DEMO-002/status')
+    expect(data.status).toBe('processing')
   })
 })

@@ -19,8 +19,6 @@ from agents.schemas import CaseObject, SpecialistResult
 from agents.specialists._parse import parse_specialist_response
 from config import settings
 
-_DEBUG_LOG = "/home/yconic/Documents/shadi/.cursor/debug-4f5ee4.log"
-
 _SYSTEM_PROMPT = """\
 You are an attending cardiologist. Analyse the patient case and generate a
 differential diagnosis focused on cardiovascular causes.
@@ -101,5 +99,4 @@ class CardiologyAgent(BaseAgent[SpecialistResult]):
             agent_name=self.name,
             domain=self.domain,
             case_id=case.case_id,
-            log_path=_DEBUG_LOG,
         )

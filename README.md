@@ -67,8 +67,8 @@ flowchart TD
 
 ### Wiring status (as implemented)
 
-- **Case intake:** `POST /cases` builds a `CaseObject` from the FHIR R4 bundle via `FHIRNormalizer.bundle_to_case` (`CaseObject.from_fhir_bundle` in `agents/schemas.py`). The LLM **IntakeAgent** (`qwen2.5:7b`) exists under `agents/intake/` and is covered by unit tests, but it is **not** called from `POST /cases` or from `Orchestrator.run()` yet.
-- **Diagnostic jobs:** The **`worker`** service runs arq `tasks.pipeline.run_diagnostic_pipeline`, which loads the case from Postgres and calls `Orchestrator().run(case)`. The orchestrator runs **four specialists** (Ollama `MEDITRON_MODEL`) → evidence grounding → A2A debate → orchestrator synthesis → safety veto. **ImageAnalysisAgent** (MedGemma) exists under `agents/specialists/image_agent.py` and is tested in isolation, but it is **not** invoked inside `Orchestrator.run()` yet.
+- **Case intake:** `POST /cases` builds a `CaseObject` from the FHIR R4 bundle via `FHIRNormalizer.bundle_to_case` (`CaseObject.from_fhir_bundle` in `agents/schemas.py`). The **IntakeAgent** (`qwen2.5:7b`) is wired as Stage 0 in `Orchestrator.run()` — it enriches the `CaseObject` with SNOMED CT, LOINC, and RxNorm codes extracted from triage text before specialists run.
+- **Diagnostic jobs:** The **`worker`** service runs arq `tasks.pipeline.run_diagnostic_pipeline`, which loads the case from Postgres and calls `Orchestrator().run(case)`. The orchestrator runs **intake enrichment** → **imaging** (MedGemma, conditional on attachments) → **four specialists** (Ollama `MEDITRON_MODEL`) → **evidence grounding** (with results fed into debate and synthesis) → **A2A debate** → **orchestrator synthesis** → **safety veto**. The **ImageAnalysisAgent** (MedGemma) is wired and runs on every case; it returns empty results when no imaging attachments are present.
 - **FHIR Subscription rest-hook:** Inbound notifications are handled by **`POST /fhir/notify`** on the **api** process (port **8000**), not a separate container. Configure `NOTIFICATION_ENDPOINT`, `FHIR_WEBHOOK_SECRET`, and related vars per `.env.example` when MCP is enabled.
 - **Local EHR for #26 / #27:** The in-repo **mock EHR** (`python -m tools.mock_ehr`) implements OAuth token, `Subscription`, and a demo rest-hook to Shadi. See [tools/mock_ehr/README.md](tools/mock_ehr/README.md). It is run **beside** Compose, not included in the default `docker compose up` profile.
 
@@ -114,13 +114,13 @@ The veto's most important moment: **thrombolytics contraindicated in aortic diss
 
 Aortic dissection and STEMI present with overlapping symptoms (chest pain, ST changes). A specialist agent may recommend tPA. Shadi's safety veto agent scans the patient's vitals, imaging flags, and medication context, identifies the aortic dissection risk, and blocks the recommendation with an explicit rationale before output reaches the physician.
 
-This is a documented fatal error pattern in emergency medicine. The veto fires live and the dashboard shows exactly why the recommendation was blocked.
+This is a documented fatal error pattern in emergency medicine. The veto fires live and the dashboard shows exactly why the recommendation was blocked. With `MOCK_LLM=true` (the default), veto decisions are deterministic stubs — all recommendations pass. Set `MOCK_LLM=false` and pull `phi4:14b` to see live veto behavior.
 
 ---
 
-## Evaluation Methodology
+## Evaluation Methodology (Planned)
 
-Shadi is evaluated against **MIMIC-IV de-identified cases**, not just USMLE Q&A benchmarks. USMLE measures recall of medical knowledge; MIMIC-IV measures performance on real patient presentations with the noise, ambiguity, and incomplete information that characterizes actual emergency medicine. Both benchmarks are run; MIMIC-IV is the primary claim.
+Shadi's planned evaluation methodology targets **MIMIC-IV de-identified cases**, not just USMLE Q&A benchmarks. USMLE measures recall of medical knowledge; MIMIC-IV measures performance on real patient presentations with the noise, ambiguity, and incomplete information that characterizes actual emergency medicine. Both benchmarks are planned; MIMIC-IV will be the primary claim. The evaluation harness is not yet implemented.
 
 ---
 

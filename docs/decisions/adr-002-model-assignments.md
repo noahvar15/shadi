@@ -33,6 +33,8 @@ A second inference server (Ollama) runs alongside vLLM. Both expose an OpenAI-co
 
 ### Specialist Agents ×4 → `meditron:70b` + LoRA adapters (vLLM)
 
+> **Note:** Superseded by [ADR-004](adr-004-meditron-via-ollama.md) — specialists now use Ollama `MEDITRON_MODEL` by default with prompt-based domain differentiation. vLLM+LoRA is optional via the `vllm-lora` Compose profile.
+
 **Rationale:** Unchanged from ADR-001. Meditron-70B is trained on PubMed and clinical guidelines and outperforms general-purpose 70B models on clinical reasoning benchmarks. vLLM's `--enable-lora` hot-swaps the four domain adapters (cardiology, neurology, pulmonology, toxicology) on a single base model load.
 
 **Approximate VRAM:** ~38 GB base (FP4) + ~8 GB adapters
@@ -40,6 +42,8 @@ A second inference server (Ollama) runs alongside vLLM. Both expose an OpenAI-co
 ---
 
 ### Evidence Grounding Agent → `nomic-embed-text` + `meditron:70b` (Ollama + vLLM reuse)
+
+> **Note:** Superseded by [ADR-004](adr-004-meditron-via-ollama.md) — claim evaluation now uses Ollama `MEDITRON_MODEL` by default, not vLLM. The embedding model (`nomic-embed-text`) is unchanged.
 
 **Rationale:** Evidence grounding has two sub-tasks:
 

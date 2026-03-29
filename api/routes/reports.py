@@ -6,11 +6,14 @@ import json
 from typing import Any
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from agents.schemas import DiagnosisCandidate, VetoDecision
 from api.deps import PoolDep
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -81,11 +84,15 @@ async def get_report(case_id: UUID, pool: PoolDep) -> ReportResponse:
             pipeline_step=row["pipeline_step"],
         )
 
-    report_data: dict[str, Any] = (
-        json.loads(row["report_json"])
-        if isinstance(row["report_json"], str)
-        else row["report_json"]
-    )
+    try:
+        report_data: dict[str, Any] = (
+            json.loads(row["report_json"])
+            if isinstance(row["report_json"], str)
+            else row["report_json"]
+        )
+    except (json.JSONDecodeError, TypeError) as exc:
+        logger.error("reports.report_json_corrupt", case_id=str(case_id), error=str(exc))
+        raise HTTPException(status_code=502, detail="Corrupted report data") from exc
     return ReportResponse(
         case_id=str(case_id),
         status=status,

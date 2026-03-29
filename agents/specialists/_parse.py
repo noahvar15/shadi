@@ -112,7 +112,6 @@ def parse_specialist_response(
     agent_name: str,
     domain: str,
     case_id: Any,
-    log_path: str | None = None,
 ) -> SpecialistResult:
     """Parse raw LLM output into a SpecialistResult, tolerating model quirks."""
     log = logger.bind(agent=agent_name, domain=domain)
@@ -128,7 +127,6 @@ def parse_specialist_response(
                 payload = json.loads(cleaned[: last_brace + 1])
             except json.JSONDecodeError:
                 log.error("specialist.json_parse_failed", raw_preview=raw[:300])
-                _log_to_file(log_path, agent_name, "json_parse_failed", {"raw_preview": raw[:500]})
                 return SpecialistResult(
                     agent_name=agent_name,
                     case_id=case_id,
@@ -138,7 +136,6 @@ def parse_specialist_response(
                 )
         else:
             log.error("specialist.json_parse_failed", raw_preview=raw[:300])
-            _log_to_file(log_path, agent_name, "json_parse_failed", {"raw_preview": raw[:500]})
             return SpecialistResult(
                 agent_name=agent_name,
                 case_id=case_id,
@@ -171,13 +168,6 @@ def parse_specialist_response(
         except Exception as exc:
             log.warning("specialist.diagnosis_parse_skip", index=i, error=str(exc))
 
-    _log_to_file(log_path, agent_name, "parsed_result", {
-        "raw_preview": raw[:500],
-        "diagnoses_count": len(diagnoses),
-        "diagnoses": [d.model_dump() for d in diagnoses],
-        "reasoning_preview": reasoning[:200],
-    })
-
     return SpecialistResult(
         agent_name=agent_name,
         case_id=case_id,
@@ -185,23 +175,3 @@ def parse_specialist_response(
         diagnoses=diagnoses,
         reasoning_trace=reasoning,
     )
-
-
-def _log_to_file(path: str | None, agent: str, message: str, data: dict) -> None:
-    if not path:
-        return
-    import time
-    entry = json.dumps({
-        "sessionId": "4f5ee4",
-        "location": f"agents/specialists/_parse.py:{agent}",
-        "message": message,
-        "data": data,
-        "timestamp": int(time.time() * 1000),
-        "hypothesisId": "H1-H4",
-        "runId": "pre-fix",
-    })
-    try:
-        with open(path, "a") as f:
-            f.write(entry + "\n")
-    except OSError:
-        pass

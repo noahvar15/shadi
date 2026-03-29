@@ -14,8 +14,8 @@ Checks performed
 
 Orchestrator contract
 ---------------------
-The orchestrator calls ``any(d.vetoed for d in safety_result.decisions)`` and
-halts the pipeline if any decision is vetoed.
+The orchestrator records vetoed items on the report via
+``report.vetoed_recommendations``; the caller decides how to handle vetoes.
 
 Mock mode
 ---------

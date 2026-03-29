@@ -12,7 +12,7 @@ export interface MockCase {
   case_id: string
   patient_id: string
   patient_name: string
-  status: 'queued' | 'running' | 'complete'
+  status: 'queued' | 'processing' | 'complete' | 'failed'
   created_at: string
   chief_complaint: string
 }
@@ -38,7 +38,7 @@ const SEED_CASES: MockCase[] = [
     case_id: 'CASE-DEMO-002',
     patient_id: 'PT-DEMO-002',
     patient_name: 'James Okafor',
-    status: 'running',
+    status: 'processing',
     created_at: new Date(Date.now() - 900_000).toISOString(),
     chief_complaint: 'Chief Complaint: Sudden severe headache\nVitals: BP 188/110, HR 78',
   },
@@ -106,5 +106,55 @@ export const server = setupServer(
       return HttpResponse.json({ detail: 'vote must be "up", "down", or null' }, { status: 422 })
     }
     return HttpResponse.json({ ok: true })
+  }),
+
+  // GET /api/reports/:id — full report or in-progress
+  http.get('http://localhost/api/reports/:caseId', ({ params }) => {
+    const caseId = String(params.caseId)
+    const found = mockCases.find((c) => c.case_id === caseId)
+
+    if (found && found.status !== 'complete') {
+      return HttpResponse.json({
+        case_id: caseId,
+        status: found.status,
+        pipeline_step: 'specialists',
+        top_diagnoses: [],
+        consensus_level: 0,
+        divergent_agents: [],
+        vetoed_recommendations: [],
+        completed_at: null,
+        error_message: null,
+      })
+    }
+
+    return HttpResponse.json({
+      case_id: caseId,
+      status: 'complete',
+      pipeline_step: null,
+      top_diagnoses: [
+        {
+          rank: 1,
+          display: 'Acute Myocardial Infarction',
+          snomed_code: '57054005',
+          confidence: 0.87,
+          next_steps: ['Urgent ECG', 'Troponin levels'],
+          supporting_evidence: [],
+          flags: [],
+        },
+      ],
+      consensus_level: 0.9,
+      divergent_agents: [],
+      vetoed_recommendations: [],
+      completed_at: new Date().toISOString(),
+      error_message: null,
+    })
+  }),
+
+  // GET /api/reports/:id/status
+  http.get('http://localhost/api/reports/:caseId/status', ({ params }) => {
+    const caseId = String(params.caseId)
+    const found = mockCases.find((c) => c.case_id === caseId)
+    const status = found ? found.status : 'complete'
+    return HttpResponse.json({ case_id: caseId, status })
   }),
 )

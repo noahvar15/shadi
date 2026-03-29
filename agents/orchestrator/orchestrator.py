@@ -1,17 +1,20 @@
 """Orchestrator — coordinates the full diagnostic pipeline.
 
 Sequence:
-  1. Fan-out: dispatch CaseObject to all 4 specialist agents concurrently
-  2. Evidence grounding: each specialist result is cross-checked
-  3. A2A debate: one round of structured ENDORSE/CHALLENGE/MODIFY messages
-  4. Output synthesis: produce a preliminary DifferentialReport
-  5. Safety veto: block unsafe recommendations; populate vetoed_recommendations
+  0. Intake: extract SNOMED/LOINC/RxNorm codes from triage text (enriches CaseObject)
+  1. Imaging (optional): interpret imaging attachments if present
+  2. Fan-out: dispatch CaseObject to all 4 specialist agents concurrently
+  3. Evidence grounding: each specialist result is cross-checked
+  4. A2A debate: one round of structured ENDORSE/CHALLENGE/MODIFY messages
+  5. Output synthesis: produce a preliminary DifferentialReport
+  6. Safety veto: block unsafe recommendations; populate vetoed_recommendations
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Awaitable, Callable
 
 import structlog
@@ -21,9 +24,11 @@ from a2a.debate import DebateManager
 from a2a.protocol import A2AMessage, MessageIntent
 from agents._llm import call_chat
 from agents.evidence.evidence_agent import EvidenceAgent
+from agents.intake.intake_agent import IntakeAgent
 from agents.safety.veto_agent import SafetyVetoAgent
 from agents.schemas import CaseObject, DiagnosisCandidate, DifferentialReport, EvidenceResult, SafetyResult, SpecialistResult
 from agents.specialists.cardiology_agent import CardiologyAgent
+from agents.specialists.image_agent import ImageAnalysisAgent
 from agents.specialists.neurology_agent import NeurologyAgent
 from agents.specialists.pulmonology_agent import PulmonologyAgent
 from agents.specialists.toxicology_agent import ToxicologyAgent
@@ -75,9 +80,13 @@ class Orchestrator:
     def __init__(
         self,
         specialists: list | None = None,
+        intake_agent: IntakeAgent | None = None,
+        image_agent: ImageAnalysisAgent | None = None,
         evidence_agent: EvidenceAgent | None = None,
         safety_agent: SafetyVetoAgent | None = None,
     ) -> None:
+        self._intake_agent: IntakeAgent = intake_agent or IntakeAgent()
+        self._image_agent: ImageAnalysisAgent = image_agent or ImageAnalysisAgent()
         self._specialists: list = specialists or [
             CardiologyAgent(),
             NeurologyAgent(),
@@ -99,7 +108,29 @@ class Orchestrator:
             if on_step:
                 await on_step(name)
 
-        # ── 1. Specialist reasoning (parallel or sequential — see SPECIALISTS_PARALLEL) ─
+        # ── 0. Intake — enrich CaseObject with SNOMED/LOINC/RxNorm codes ─────
+        await _step("intake")
+        try:
+            await self._intake_agent.run(case)
+            log.info("orchestrator.intake.done",
+                     conditions=len(case.conditions),
+                     observations=len(case.observations),
+                     medications=len(case.medications))
+        except Exception as exc:
+            log.warning("orchestrator.intake.failed", error=str(exc))
+
+        # ── 1. Imaging (optional) — interpret attachments if present ──────────
+        await _step("imaging")
+        imaging_result: SpecialistResult | None = None
+        try:
+            imaging_result = await self._image_agent.run(case)
+            log.info("orchestrator.imaging.done",
+                     diagnoses=len(imaging_result.diagnoses),
+                     skipped=not case.imaging_attachments)
+        except Exception as exc:
+            log.warning("orchestrator.imaging.failed", error=str(exc))
+
+        # ── 2. Specialist reasoning (parallel or sequential) ─────────────────
         await _step("specialists")
         if settings.SPECIALISTS_PARALLEL:
             raw_results = await asyncio.gather(
@@ -132,9 +163,11 @@ class Orchestrator:
                 )
             else:
                 specialist_results.append(outcome)
+        if imaging_result and imaging_result.diagnoses:
+            specialist_results.append(imaging_result)
         log.info("orchestrator.specialists.done", count=len(specialist_results))
 
-        # ── 2. Evidence grounding ──────────────────────────────────────────────
+        # ── 3. Evidence grounding ─────────────────────────────────────────────
         await _step("evidence")
         try:
             evidence_result = await self._evidence_agent.run(case, list(specialist_results))
@@ -149,13 +182,22 @@ class Orchestrator:
             )
         log.info("orchestrator.evidence.done", grounded=len(evidence_result.grounded_diagnoses))
 
-        # ── 3. A2A debate ─────────────────────────────────────────────────────
+        # Build evidence lookup so debate and synthesis can use grounded results
+        evidence_by_display: dict[str, list[dict]] = {}
+        for gdx in evidence_result.grounded_diagnoses:
+            evidence_by_display[gdx.display] = [
+                e.model_dump(mode="json") for e in gdx.supporting_evidence
+            ]
+
+        # ── 4. A2A debate — uses evidence-grounded diagnoses ─────────────────
         await _step("debate")
         debate = DebateManager(case_id=case.case_id)
-        round_ = debate.open_round()
+        debate.open_round()
         for sr in specialist_results:
             for dx in sr.diagnoses:
-                if dx.confidence >= 0.2:
+                has_evidence = bool(evidence_by_display.get(dx.display))
+                endorse_threshold = 0.15 if has_evidence else 0.2
+                if dx.confidence >= endorse_threshold:
                     debate.add_message(A2AMessage(
                         sender=sr.agent_name,
                         recipient="orchestrator",
@@ -165,7 +207,8 @@ class Orchestrator:
                         target_diagnosis_snomed=dx.snomed_code,
                         argument=(
                             f"{sr.agent_name} endorses {dx.display} "
-                            f"(rank {dx.rank}, confidence {dx.confidence:.2f})"
+                            f"(rank {dx.rank}, confidence {dx.confidence:.2f}"
+                            f"{', evidence-supported' if has_evidence else ''})"
                         ),
                     ))
                 else:
@@ -179,6 +222,7 @@ class Orchestrator:
                         argument=(
                             f"{sr.agent_name} challenges {dx.display}: "
                             f"low confidence {dx.confidence:.2f}"
+                            f"{', no supporting evidence' if not has_evidence else ''}"
                         ),
                     ))
         debate.close_round()
@@ -190,7 +234,7 @@ class Orchestrator:
             divergent=divergent,
         )
 
-        # ── 4. Synthesis ──────────────────────────────────────────────────────
+        # ── 5. Synthesis — includes evidence grounding data ──────────────────
         await _step("synthesis")
         synthesis_user = json.dumps({
             "specialist_findings": [
@@ -205,19 +249,18 @@ class Orchestrator:
                 }
                 for sr in specialist_results
             ],
+            "evidence_grounding": [
+                {
+                    "diagnosis": gdx.display,
+                    "citations": [e.model_dump(mode="json") for e in gdx.supporting_evidence],
+                    "evidence_gap": not gdx.supporting_evidence,
+                }
+                for gdx in evidence_result.grounded_diagnoses
+            ],
             "consensus_scores": consensus,
             "divergent_diagnoses": divergent,
             "patient_chief_complaint": case.chief_complaint,
         })
-        # #region agent log
-        import time as _time
-        _log_entry = json.dumps({"sessionId": "4f5ee4", "location": "orchestrator.py:synthesis_input", "message": "synthesis input data", "data": {"specialist_dx_counts": [len(sr.diagnoses) for sr in specialist_results], "has_reasoning": [bool(sr.reasoning_trace) for sr in specialist_results], "consensus_entries": len(consensus), "consensus": consensus, "divergent": divergent}, "timestamp": int(_time.time() * 1000), "hypothesisId": "H5", "runId": "pre-fix"})
-        try:
-            with open("/home/yconic/Documents/shadi/.cursor/debug-4f5ee4.log", "a") as _f:
-                _f.write(_log_entry + "\n")
-        except OSError:
-            pass
-        # #endregion
         raw = ""
         try:
             raw = await call_chat(
@@ -232,7 +275,6 @@ class Orchestrator:
             )
             cleaned_raw = raw.strip()
             if cleaned_raw.startswith("```"):
-                import re
                 m = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", cleaned_raw, re.DOTALL)
                 if m:
                     cleaned_raw = m.group(1).strip()
@@ -264,14 +306,6 @@ class Orchestrator:
                 error=str(exc),
             )
             top_diagnoses = []
-        # #region agent log
-        _synth_log = json.dumps({"sessionId": "4f5ee4", "location": "orchestrator.py:synthesis_output", "message": "synthesis result", "data": {"raw_preview": raw[:500], "top_diagnoses_count": len(top_diagnoses), "diagnoses": [d.model_dump(exclude={"supporting_evidence"}) for d in top_diagnoses]}, "timestamp": int(_time.time() * 1000), "hypothesisId": "H5", "runId": "pre-fix"})
-        try:
-            with open("/home/yconic/Documents/shadi/.cursor/debug-4f5ee4.log", "a") as _f:
-                _f.write(_synth_log + "\n")
-        except OSError:
-            pass
-        # #endregion
         log.info("orchestrator.synthesis.done", top_diagnoses_count=len(top_diagnoses))
 
         report = DifferentialReport(
@@ -281,11 +315,8 @@ class Orchestrator:
             divergent_agents=divergent,
         )
 
-        # ── 5. Safety veto ────────────────────────────────────────────────────
+        # ── 6. Safety veto ───────────────────────────────────────────────────
         await _step("safety")
-        # Runs after synthesis so it can inspect the assembled recommendations.
-        # If any decision is vetoed, the vetoed items are recorded on the report
-        # and a warning is logged; the orchestrator caller decides whether to halt.
         try:
             safety_result = await self._safety_agent.run(case, report)
         except Exception as exc:
@@ -299,7 +330,7 @@ class Orchestrator:
         vetoed = [d for d in safety_result.decisions if d.vetoed]
         if vetoed:
             log.warning(
-                "orchestrator.safety_veto.halt",
+                "orchestrator.safety_veto.triggered",
                 case_id=str(case.case_id),
                 vetoed_count=len(vetoed),
             )
