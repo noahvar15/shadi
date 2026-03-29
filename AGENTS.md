@@ -87,6 +87,7 @@ pytest tests/
 ## Rules
 
 - **All architectural decisions go in `docs/decisions/` first.** See `adr-001-architecture.md` for format. Do not change the agent pipeline, model strategy, A2A protocol, or safety veto behavior without an ADR.
+- **`docs/PRD.md` is the canonical product requirements checklist.** If a PR completes one or more listed requirements, include a `PRD:` line in the PR body with explicit IDs such as `PRD: FE-001, API-002`. Empty or missing `PRD:` lines cause no checkbox updates. IDs must match the `<!-- prd:... -->` markers in `docs/PRD.md`.
 - **PHI never leaves the machine.** No cloud API calls for inference. No logging of patient data.
 - **Safety veto is non-negotiable.** Changes to `agents/safety/` require explicit review. The veto must fire before any output reaches the dashboard.
 - Run `pytest` before claiming any fix or feature is complete.
