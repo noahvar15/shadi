@@ -88,6 +88,7 @@ class ImageAnalysisAgent(BaseAgent[SpecialistResult]):
             self.inference_url,
             self.model,
             messages,
+            response_format={"type": "json_object"},
             mock_domain=self.domain,
         )
 

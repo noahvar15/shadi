@@ -1,7 +1,6 @@
 """Neurology specialist agent.
 
-Model: meditron:70b + "neurology" LoRA adapter via vLLM (see ADR-002)
-Inference server: VLLM_BASE_URL
+Model: ``MEDITRON_MODEL`` on Ollama (default ``meditron:70b``); domain via prompt (ADR-004).
 
 Focuses on:
   - Acute ischaemic stroke / haemorrhagic stroke
@@ -18,6 +17,7 @@ import json
 
 from agents._llm import call_chat
 from agents.base import BaseAgent
+from agents.meditron_model_ids import specialist_chat_model
 from agents.schemas import CaseObject, DiagnosisCandidate, SpecialistResult
 from config import settings
 
@@ -62,12 +62,12 @@ Observations: {observations}
 
 
 class NeurologyAgent(BaseAgent[SpecialistResult]):
-    """Neurology specialist using Meditron-70B + LoRA adapter."""
+    """Neurology specialist using Ollama Meditron."""
 
     name = "neurology"
     domain = "neurology"
-    model = "neurology"  # LoRA adapter name on vLLM
-    inference_url = settings.VLLM_BASE_URL
+    model = settings.MEDITRON_MODEL
+    inference_url = settings.OLLAMA_BASE_URL
 
     async def reason(self, case: CaseObject) -> SpecialistResult:
         user_content = _USER_TEMPLATE.format(
@@ -91,8 +91,9 @@ class NeurologyAgent(BaseAgent[SpecialistResult]):
 
         raw = await call_chat(
             self.inference_url,
-            self.model,
+            specialist_chat_model(self.domain),
             messages,
+            response_format={"type": "json_object"},
             mock_domain=self.domain,
         )
 

@@ -6,8 +6,8 @@ Two-phase pipeline per ADR-002:
    ``nomic-embed-text`` (Ollama ``/api/embeddings``), then run a pgvector
    cosine-distance query against the ``evidence`` table.
 
-2. **Claim evaluation** — for every retrieved passage, ask ``meditron:70b``
-   (vLLM) whether the passage SUPPORTS, REFUTES, or is NEUTRAL toward the
+2. **Claim evaluation** — for every retrieved passage, ask ``MEDITRON_MODEL``
+   (Ollama, default ``meditron:70b``) whether the passage SUPPORTS, REFUTES, or is NEUTRAL toward the
    candidate diagnosis. Only SUPPORTS passages become ``EvidenceCitation``
    objects attached to ``DiagnosisCandidate.supporting_evidence``.
 
@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     import asyncpg as asyncpg_t
 
 from agents._llm import call_chat
+from agents.meditron_model_ids import claim_eval_chat_model
 from agents.base import BaseAgent
 from agents.schemas import (
     CaseObject,
@@ -79,11 +80,11 @@ _MAX_PASSAGES = 5
 
 
 class EvidenceAgent(BaseAgent[EvidenceResult]):
-    """Evidence grounding using nomic-embed-text retrieval + meditron:70b claim eval."""
+    """Evidence grounding using nomic-embed-text retrieval + Ollama Meditron claim eval."""
 
     name = "evidence"
     domain = "evidence"
-    model = "nomic-embed-text"  # primary: embedding via Ollama
+    model = settings.EVIDENCE_EMBED_MODEL
     inference_url = settings.OLLAMA_BASE_URL
 
     # ---------------------------------------------------------------------------
@@ -224,7 +225,8 @@ class EvidenceAgent(BaseAgent[EvidenceResult]):
         nomic-embed-text).
         """
         ollama_root = settings.OLLAMA_BASE_URL.removesuffix("/v1")
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        embed_timeout = httpx.Timeout(float(settings.OLLAMA_EMBED_TIMEOUT_SECONDS))
+        async with httpx.AsyncClient(timeout=embed_timeout) as client:
             resp = await client.post(
                 f"{ollama_root}/api/embeddings",
                 json={"model": self.model, "prompt": text},
@@ -262,7 +264,7 @@ class EvidenceAgent(BaseAgent[EvidenceResult]):
         source: str,
         diagnosis_display: str,
     ) -> str:
-        """Ask meditron:70b whether *excerpt* supports *diagnosis_display*.
+        """Ask ``MEDITRON_MODEL`` (Ollama) whether *excerpt* supports *diagnosis_display*.
 
         Returns one of ``"SUPPORTS"``, ``"REFUTES"``, or ``"NEUTRAL"``.
         Defaults to ``"NEUTRAL"`` if the response cannot be parsed.
@@ -277,8 +279,8 @@ class EvidenceAgent(BaseAgent[EvidenceResult]):
             {"role": "user", "content": user_content},
         ]
         raw = await call_chat(
-            settings.VLLM_BASE_URL,
-            "meditron:70b",
+            settings.OLLAMA_BASE_URL,
+            claim_eval_chat_model(),
             messages,
             response_format={"type": "json_object"},
             mock_domain=self.domain,

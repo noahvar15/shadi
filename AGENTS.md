@@ -1,6 +1,6 @@
 # Shadi — Agent Guide
 
-Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads patient data via FHIR R4, runs **four** LoRA domain specialists on one shared Meditron-70B load (plus separate non-LoRA agents for intake, optional imaging, evidence, orchestrator synthesis, and safety veto), and produces a ranked differential diagnosis before the physician walks in.
+Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads patient data via FHIR R4, runs **four** specialist agents over a shared **Meditron** model on Ollama (`MEDITRON_MODEL`, default `meditron:70b`; domain-specific prompts per ADR-004), plus separate agents for intake, optional imaging, evidence, orchestrator synthesis, and safety veto — producing a ranked differential diagnosis before the physician walks in. Optional vLLM+LoRA exists as a Compose profile only (ADR-003).
 
 **Wiring note:** `POST /cases` builds `CaseObject` from a FHIR bundle via the normalizer, not via `IntakeAgent`. `Orchestrator.run()` runs specialists → evidence → debate → synthesis → veto; **`IntakeAgent` and `ImageAnalysisAgent` are not called there yet** (see [README.md](README.md) *Wiring status*). Root [`config.py`](config.py) sets **`MOCK_LLM`** (default `true`).
 
@@ -8,14 +8,14 @@ Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads p
 
 ## Architecture at a Glance
 
-**Inference split (ADR-002):** vLLM serves `meditron:70b` with four hot-swapped LoRA adapters. Ollama serves intake (Qwen), imaging (MedGemma), embeddings, safety veto (Phi), and orchestrator synthesis (DeepSeek-R1). No cloud APIs — PHI stays on the machine.
+**Inference split (ADR-002, ADR-004):** Ollama serves **all** agent chat and embeddings, including **`MEDITRON_MODEL`** for the four specialists and evidence claim evaluation. Intake (Qwen), imaging (MedGemma), safety (Phi), and orchestrator synthesis (DeepSeek-R1) are also on Ollama. Optional **vLLM + LoRA** is a Compose **`vllm-lora`** profile for experiments — default agents do not call it. No cloud APIs — PHI stays on the machine.
 
 ```
 EHR → FHIR MCP Server → Intake Agent → CaseObject
                           │    │
                           │    └──→ Imaging Agent (MedGemma, only if attachments)
                           ↓
-          Four LoRA specialists: Cardiology / Neurology / Pulmonology / Toxicology (parallel, vLLM)
+          Four specialists: Cardiology / Neurology / Pulmonology / Toxicology (parallel, Ollama Meditron)
                           ↓
                     Evidence Grounding Agent
                           ↓
@@ -26,7 +26,7 @@ EHR → FHIR MCP Server → Intake Agent → CaseObject
               DiagnosticReport (FHIR) + Dashboard
 ```
 
-Only the four domain agents use LoRA on Meditron. The imaging agent is multimodal (MedGemma on Ollama), not a fifth LoRA specialist.
+Specialists share **Meditron** via Ollama (`MEDITRON_MODEL`, default `meditron:70b`); differentiation is by prompt and domain metadata, not separate weight loads. The imaging agent is multimodal (MedGemma on Ollama), not a fifth specialist adapter. Optional per-domain LoRA on vLLM is profile-only (ADR-003).
 
 ---
 
@@ -64,8 +64,8 @@ docker-compose.yml   # vLLM LoRA modules, Ollama, api, worker, postgres, redis
 |---|---|
 | Python runtime | 3.11+ |
 | Web framework | FastAPI + Uvicorn |
-| Inference | vLLM 0.6+, LoRA via `--enable-lora` |
-| Models | Meditron-70B (FP4) base + 4 LoRA adapters |
+| Inference | Ollama (default agents); optional vLLM 0.6+ + LoRA (`vllm-lora` profile) |
+| Models | Shared `MEDITRON_MODEL` on Ollama for four specialists; other Ollama tags per ADR-002 / ADR-004 |
 | FHIR | `fhir.resources` 7.1+ |
 | Async task queue | Redis + arq |
 | Database | PostgreSQL via asyncpg + SQLAlchemy async |
@@ -143,7 +143,7 @@ Agents communicate via structured messages in `a2a/`. Valid message types: `ENDO
 1. Specialist agents reason independently in parallel — no cross-talk before the debate round.
 2. Evidence grounding runs after specialist reasoning, before debate.
 3. The safety veto runs last, after consensus, and can block any recommendation unconditionally.
-4. The LoRA adapter for each specialist must match the specialty's training domain exactly.
+4. Each specialist’s **prompts and domain metadata** must match the clinical specialty; weights are shared (`MEDITRON_MODEL`) unless a future ADR reintroduces per-domain adapters.
 
 ---
 

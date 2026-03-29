@@ -1,7 +1,6 @@
 """Pulmonology specialist agent.
 
-Model: meditron:70b + "pulmonology" LoRA adapter via vLLM (see ADR-002)
-Inference server: VLLM_BASE_URL
+Model: ``MEDITRON_MODEL`` on Ollama (default ``meditron:70b``); domain via prompt (ADR-004).
 
 Focuses on:
   - Acute respiratory distress syndrome (ARDS)
@@ -18,6 +17,7 @@ import json
 
 from agents._llm import call_chat
 from agents.base import BaseAgent
+from agents.meditron_model_ids import specialist_chat_model
 from agents.schemas import CaseObject, DiagnosisCandidate, SpecialistResult
 from config import settings
 
@@ -62,12 +62,12 @@ Observations: {observations}
 
 
 class PulmonologyAgent(BaseAgent[SpecialistResult]):
-    """Pulmonology specialist using Meditron-70B + LoRA adapter."""
+    """Pulmonology specialist using Ollama Meditron."""
 
     name = "pulmonology"
     domain = "pulmonology"
-    model = "pulmonology"  # LoRA adapter name on vLLM
-    inference_url = settings.VLLM_BASE_URL
+    model = settings.MEDITRON_MODEL
+    inference_url = settings.OLLAMA_BASE_URL
 
     async def reason(self, case: CaseObject) -> SpecialistResult:
         user_content = _USER_TEMPLATE.format(
@@ -91,8 +91,9 @@ class PulmonologyAgent(BaseAgent[SpecialistResult]):
 
         raw = await call_chat(
             self.inference_url,
-            self.model,
+            specialist_chat_model(self.domain),
             messages,
+            response_format={"type": "json_object"},
             mock_domain=self.domain,
         )
 

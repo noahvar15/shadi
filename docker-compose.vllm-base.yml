@@ -1,0 +1,11 @@
+# Merge with profile: docker compose -f docker-compose.yml -f docker-compose.vllm-base.yml --profile vllm-lora up -d vllm
+# Optional vLLM stack only (agents use Ollama Meditron per ADR-004). See ADR-003.
+
+services:
+  vllm:
+    volumes:
+      - ${MODEL_BASE_PATH:-/models/meditron-70b}:/models/base:ro
+    command: >
+      --model /models/base
+      --max-model-len 4096
+      --port 8080

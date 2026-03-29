@@ -21,7 +21,7 @@ from a2a.protocol import A2AMessage, MessageIntent
 from agents._llm import call_chat
 from agents.evidence.evidence_agent import EvidenceAgent
 from agents.safety.veto_agent import SafetyVetoAgent
-from agents.schemas import CaseObject, DiagnosisCandidate, DifferentialReport, SpecialistResult
+from agents.schemas import CaseObject, DiagnosisCandidate, DifferentialReport, EvidenceResult, SafetyResult, SpecialistResult
 from agents.specialists.cardiology_agent import CardiologyAgent
 from agents.specialists.neurology_agent import NeurologyAgent
 from agents.specialists.pulmonology_agent import PulmonologyAgent
@@ -73,15 +73,52 @@ class Orchestrator:
         log = logger.bind(case_id=str(case.case_id))
         log.info("orchestrator.run.start")
 
-        # ── 1. Parallel specialist reasoning ──────────────────────────────────
-        specialist_results: list[SpecialistResult] = await asyncio.gather(
-            *[agent.run(case) for agent in self._specialists],
-            return_exceptions=False,
-        )
+        # ── 1. Specialist reasoning (parallel or sequential — see SPECIALISTS_PARALLEL) ─
+        if settings.SPECIALISTS_PARALLEL:
+            raw_results = await asyncio.gather(
+                *[agent.run(case) for agent in self._specialists],
+                return_exceptions=True,
+            )
+        else:
+            raw_results = []
+            for agent in self._specialists:
+                try:
+                    raw_results.append(await agent.run(case))
+                except BaseException as exc:  # noqa: BLE001 — mirror gather(return_exceptions=True)
+                    raw_results.append(exc)
+        specialist_results: list[SpecialistResult] = []
+        for agent, outcome in zip(self._specialists, raw_results):
+            if isinstance(outcome, BaseException):
+                log.warning(
+                    "orchestrator.specialist.failed",
+                    agent=agent.name,
+                    error=str(outcome),
+                )
+                specialist_results.append(
+                    SpecialistResult(
+                        agent_name=agent.name,
+                        case_id=case.case_id,
+                        domain=agent.domain,
+                        diagnoses=[],
+                        reasoning_trace=f"Agent unavailable: {outcome}",
+                    )
+                )
+            else:
+                specialist_results.append(outcome)
         log.info("orchestrator.specialists.done", count=len(specialist_results))
 
         # ── 2. Evidence grounding ──────────────────────────────────────────────
-        evidence_result = await self._evidence_agent.run(case, list(specialist_results))
+        try:
+            evidence_result = await self._evidence_agent.run(case, list(specialist_results))
+        except Exception as exc:
+            log.warning("orchestrator.evidence.failed", error=str(exc))
+            all_diagnoses = [dx for sr in specialist_results for dx in sr.diagnoses]
+            evidence_result = EvidenceResult(
+                agent_name="evidence",
+                case_id=case.case_id,
+                domain="evidence",
+                grounded_diagnoses=all_diagnoses,
+            )
         log.info("orchestrator.evidence.done", grounded=len(evidence_result.grounded_diagnoses))
 
         # ── 3. A2A debate ─────────────────────────────────────────────────────
@@ -144,7 +181,7 @@ class Orchestrator:
         try:
             raw = await call_chat(
                 settings.OLLAMA_BASE_URL,
-                "deepseek-r1:32b",
+                settings.ORCHESTRATOR_MODEL,
                 [
                     {"role": "system", "content": _SYNTHESIS_SYSTEM},
                     {"role": "user", "content": synthesis_user},
@@ -180,7 +217,16 @@ class Orchestrator:
         # Runs after synthesis so it can inspect the assembled recommendations.
         # If any decision is vetoed, the vetoed items are recorded on the report
         # and a warning is logged; the orchestrator caller decides whether to halt.
-        safety_result = await self._safety_agent.run(case, report)
+        try:
+            safety_result = await self._safety_agent.run(case, report)
+        except Exception as exc:
+            log.warning("orchestrator.safety.failed", error=str(exc))
+            safety_result = SafetyResult(
+                agent_name="safety-veto",
+                case_id=case.case_id,
+                domain="safety",
+                decisions=[],
+            )
         vetoed = [d for d in safety_result.decisions if d.vetoed]
         if vetoed:
             log.warning(

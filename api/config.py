@@ -42,6 +42,7 @@ class Settings(BaseSettings):
         default="http://localhost:11434/v1",
         validation_alias="OLLAMA_BASE_URL",
     )
+    meditron_model: str = Field(default="meditron:70b", validation_alias="MEDITRON_MODEL")
     intake_queue: str = Field(default="arq:intake", validation_alias="INTAKE_QUEUE")
     api_secret_key: str = Field(..., validation_alias="API_SECRET_KEY")
     # DEP-1 (cross-track-dependencies): use until Noah #28 contract is merged in your fork
