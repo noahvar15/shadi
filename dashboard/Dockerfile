@@ -3,9 +3,9 @@ WORKDIR /app
 COPY package.json bun.lockb* ./
 RUN bun install --frozen-lockfile
 COPY . .
-# NEXT_PUBLIC_* vars are embedded at build time — pass at image build with --build-arg
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# Server-only rewrite destination — NOT exposed to the browser bundle
+ARG API_URL=http://localhost:8000
+ENV API_URL=${API_URL}
 RUN bun run build
 
 FROM node:20-alpine AS runner

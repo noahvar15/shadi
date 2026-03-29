@@ -34,7 +34,7 @@ export function useReportStream(caseId: string, enabled = false): StreamState {
   useEffect(() => {
     if (!enabled) return
 
-    const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/api/reports/${caseId}/stream`
+    const url = `${process.env.NEXT_PUBLIC_API_URL || ''}/api/reports/${caseId}/stream`
     const es = new EventSource(url)
     esRef.current = es
 

@@ -1,17 +1,7 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useState, useEffect, lazy, Suspense } from 'react'
-
-// Dynamically import devtools so the bundle is excluded from production
-const ReactQueryDevtools =
-  process.env.NODE_ENV === 'development'
-    ? lazy(() =>
-        import('@tanstack/react-query-devtools').then((m) => ({
-          default: m.ReactQueryDevtools,
-        }))
-      )
-    : null
+import { useState, useEffect } from 'react'
 
 async function enableMocking() {
   if (process.env.NEXT_PUBLIC_MOCK_API !== 'true') return
@@ -42,11 +32,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       {children}
-      {ReactQueryDevtools && (
-        <Suspense fallback={null}>
-          <ReactQueryDevtools initialIsOpen={false} />
-        </Suspense>
-      )}
     </QueryClientProvider>
   )
 }

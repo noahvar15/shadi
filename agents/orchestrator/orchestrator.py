@@ -32,23 +32,40 @@ from config import settings
 logger = structlog.get_logger()
 
 _SYNTHESIS_SYSTEM = """\
-You are a senior attending physician synthesizing a multi-specialty differential
-diagnosis. Given specialist findings, debate consensus scores, and divergent
-diagnoses, produce a ranked differential of the top 5 candidates.
+You are a senior attending emergency medicine physician synthesizing a
+multi-specialty differential diagnosis in an ED setting.
+
+You will receive specialist findings from cardiology, neurology, pulmonology,
+and toxicology. Each specialist may provide structured diagnoses and/or
+free-text reasoning traces. USE ALL AVAILABLE INFORMATION — even if structured
+diagnoses are sparse, the reasoning traces contain valuable clinical thinking.
+
+Your task:
+1. Review ALL specialist reasoning and diagnoses
+2. Identify the most clinically important differential diagnoses
+3. Rank them by likelihood given the clinical presentation
+4. Include actionable next steps for the emergency physician
 
 Reply ONLY with valid JSON:
 {
   "top_diagnoses": [
     {
       "rank": 1,
-      "display": "...",
-      "confidence": 0.0,
-      "snomed_code": "...",
-      "next_steps": ["..."],
-      "flags": ["..."]
+      "display": "Diagnosis name",
+      "confidence": 0.65,
+      "snomed_code": "optional SNOMED CT code",
+      "next_steps": ["Specific test or action"],
+      "flags": ["URGENT if time-critical"]
     }
   ]
 }
+
+IMPORTANT:
+- You MUST provide at least 3 diagnoses, up to 5
+- Each diagnosis MUST have a clear "display" name and numeric "confidence" (0.0-1.0)
+- Confidences across all diagnoses should sum to approximately 1.0
+- next_steps should be specific, actionable orders for the ED (labs, imaging, consults)
+- Even if specialist data is limited, use your clinical knowledge to generate a reasonable differential
 """
 
 
@@ -138,7 +155,7 @@ class Orchestrator:
         round_ = debate.open_round()
         for sr in specialist_results:
             for dx in sr.diagnoses:
-                if dx.rank == 1 and dx.confidence >= 0.4:
+                if dx.confidence >= 0.2:
                     debate.add_message(A2AMessage(
                         sender=sr.agent_name,
                         recipient="orchestrator",
@@ -147,11 +164,11 @@ class Orchestrator:
                         target_diagnosis=dx.display,
                         target_diagnosis_snomed=dx.snomed_code,
                         argument=(
-                            f"{sr.agent_name} endorses {dx.display} as primary diagnosis "
-                            f"(confidence {dx.confidence:.2f})"
+                            f"{sr.agent_name} endorses {dx.display} "
+                            f"(rank {dx.rank}, confidence {dx.confidence:.2f})"
                         ),
                     ))
-                elif dx.confidence < 0.4:
+                else:
                     debate.add_message(A2AMessage(
                         sender=sr.agent_name,
                         recipient="orchestrator",
@@ -176,10 +193,11 @@ class Orchestrator:
         # ── 4. Synthesis ──────────────────────────────────────────────────────
         await _step("synthesis")
         synthesis_user = json.dumps({
-            "specialist_diagnoses": [
+            "specialist_findings": [
                 {
                     "agent": sr.agent_name,
                     "domain": sr.domain,
+                    "reasoning_trace": sr.reasoning_trace or "(no reasoning provided)",
                     "diagnoses": [
                         d.model_dump(exclude={"supporting_evidence"})
                         for d in sr.diagnoses
@@ -189,7 +207,17 @@ class Orchestrator:
             ],
             "consensus_scores": consensus,
             "divergent_diagnoses": divergent,
+            "patient_chief_complaint": case.chief_complaint,
         })
+        # #region agent log
+        import time as _time
+        _log_entry = json.dumps({"sessionId": "4f5ee4", "location": "orchestrator.py:synthesis_input", "message": "synthesis input data", "data": {"specialist_dx_counts": [len(sr.diagnoses) for sr in specialist_results], "has_reasoning": [bool(sr.reasoning_trace) for sr in specialist_results], "consensus_entries": len(consensus), "consensus": consensus, "divergent": divergent}, "timestamp": int(_time.time() * 1000), "hypothesisId": "H5", "runId": "pre-fix"})
+        try:
+            with open("/home/yconic/Documents/shadi/.cursor/debug-4f5ee4.log", "a") as _f:
+                _f.write(_log_entry + "\n")
+        except OSError:
+            pass
+        # #endregion
         raw = ""
         try:
             raw = await call_chat(
@@ -202,13 +230,32 @@ class Orchestrator:
                 response_format={"type": "json_object"},
                 mock_domain="orchestrator",
             )
-            payload = json.loads(raw)
-            top_diagnoses = [DiagnosisCandidate(**d) for d in payload.get("top_diagnoses", [])]
+            cleaned_raw = raw.strip()
+            if cleaned_raw.startswith("```"):
+                import re
+                m = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", cleaned_raw, re.DOTALL)
+                if m:
+                    cleaned_raw = m.group(1).strip()
+            payload = json.loads(cleaned_raw)
+            raw_top = payload.get("top_diagnoses", [])
+            top_diagnoses: list[DiagnosisCandidate] = []
+            for i, d in enumerate(raw_top):
+                try:
+                    if "rank" not in d:
+                        d["rank"] = i + 1
+                    if isinstance(d.get("confidence"), str):
+                        d["confidence"] = float(d["confidence"])
+                    top_diagnoses.append(DiagnosisCandidate(**{
+                        k: v for k, v in d.items()
+                        if k in DiagnosisCandidate.model_fields
+                    }))
+                except (ValidationError, ValueError) as dx_exc:
+                    log.warning("orchestrator.synthesis.dx_skip", index=i, error=str(dx_exc))
         except (json.JSONDecodeError, ValidationError) as exc:
             log.error(
                 "orchestrator.synthesis.parse_error",
                 error=str(exc),
-                raw=raw,
+                raw=raw[:500],
             )
             top_diagnoses = []
         except Exception as exc:
@@ -217,6 +264,14 @@ class Orchestrator:
                 error=str(exc),
             )
             top_diagnoses = []
+        # #region agent log
+        _synth_log = json.dumps({"sessionId": "4f5ee4", "location": "orchestrator.py:synthesis_output", "message": "synthesis result", "data": {"raw_preview": raw[:500], "top_diagnoses_count": len(top_diagnoses), "diagnoses": [d.model_dump(exclude={"supporting_evidence"}) for d in top_diagnoses]}, "timestamp": int(_time.time() * 1000), "hypothesisId": "H5", "runId": "pre-fix"})
+        try:
+            with open("/home/yconic/Documents/shadi/.cursor/debug-4f5ee4.log", "a") as _f:
+                _f.write(_synth_log + "\n")
+        except OSError:
+            pass
+        # #endregion
         log.info("orchestrator.synthesis.done", top_diagnoses_count=len(top_diagnoses))
 
         report = DifferentialReport(

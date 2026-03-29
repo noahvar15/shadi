@@ -78,7 +78,7 @@ def test_post_cases_stub_returns_queued_and_enqueues(monkeypatch: pytest.MonkeyP
     assert mock_conn.execute.await_count == 2
     mock_arq.enqueue_job.assert_awaited_once()
     call = mock_arq.enqueue_job.await_args
-    assert call.args[0] == "tasks.pipeline.run_diagnostic_pipeline"
+    assert call.args[0] == "run_diagnostic_pipeline"
     assert call.kwargs.get("_queue_name") == "arq:intake"
 
 
