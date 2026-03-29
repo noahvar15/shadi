@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { DarkModeToggle } from '@/components/DarkModeToggle'
+import { NotificationBell } from '@/components/NotificationBell'
 
 function getInitials(name: string): string {
   return name
@@ -47,6 +48,7 @@ export function AppHeader() {
       </div>
 
       <div className="flex items-center gap-2 ml-auto">
+        <NotificationBell />
         <DarkModeToggle />
         {initials && (
           <div

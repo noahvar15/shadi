@@ -1,8 +1,8 @@
 'use client'
 
 import { use, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Loader2, ChevronLeft } from 'lucide-react'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { Loader2, ChevronLeft, ThumbsUp, ThumbsDown } from 'lucide-react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import type { DifferentialReport, DiagnosisCandidate } from '@/types/report'
@@ -48,6 +48,17 @@ function formatTimestamp(iso: string): string {
 export default function ReportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [selectedDiagnosis, setSelectedDiagnosis] = useState<DiagnosisCandidate | null>(null)
+  const [vote, setVote] = useState<'up' | 'down' | null>(null)
+  const [feedbackSent, setFeedbackSent] = useState(false)
+
+  const feedbackMutation = useMutation({
+    mutationFn: (v: 'up' | 'down') =>
+      api.post(`/api/cases/${id}/feedback`, { vote: v }).then((r) => r.data),
+    onSuccess: (_data, v) => {
+      setVote(v)
+      setFeedbackSent(true)
+    },
+  })
 
   // TanStack Query handles cleanup on unmount automatically — no manual teardown needed.
   const { data: report, error, isLoading } = useQuery<DifferentialReport, Error>({
@@ -157,6 +168,50 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
           consensusLevel={report.consensus_level}
           divergentAgents={report.divergent_agents}
         />
+
+        {/* Doctor feedback — thumbs up / down on the triage note */}
+        <div className="flex items-center gap-4 p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-[var(--foreground)]">
+              Triage Assessment
+            </p>
+            <p className="text-xs text-[var(--foreground-muted)] mt-0.5">
+              {feedbackSent
+                ? vote === 'up'
+                  ? 'Marked as accurate — thank you.'
+                  : 'Flagged for review — thank you.'
+                : 'Was the triage note accurate and complete?'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => !feedbackSent && feedbackMutation.mutate('up')}
+              disabled={feedbackSent || feedbackMutation.isPending}
+              aria-label="Triage accurate"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:cursor-not-allowed ${
+                vote === 'up'
+                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                  : 'border-[var(--border)] text-[var(--foreground-muted)] hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400'
+              }`}
+            >
+              <ThumbsUp size={14} strokeWidth={2} />
+              Accurate
+            </button>
+            <button
+              onClick={() => !feedbackSent && feedbackMutation.mutate('down')}
+              disabled={feedbackSent || feedbackMutation.isPending}
+              aria-label="Triage needs review"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors disabled:cursor-not-allowed ${
+                vote === 'down'
+                  ? 'bg-red-500 border-red-500 text-white'
+                  : 'border-[var(--border)] text-[var(--foreground-muted)] hover:border-red-400 hover:text-red-500'
+              }`}
+            >
+              <ThumbsDown size={14} strokeWidth={2} />
+              Review
+            </button>
+          </div>
+        </div>
 
         <DifferentialList
           diagnoses={report.top_diagnoses}

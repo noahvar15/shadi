@@ -9,6 +9,7 @@ import { api } from '@/lib/api'
 interface CreateCasePayload {
   chief_complaint: string
   patient_stub_id?: string
+  patient_name?: string
 }
 
 interface CreateCaseResponse {
@@ -108,7 +109,7 @@ export default function NursePage() {
     CreateCasePayload
   >({
     mutationFn: (payload) =>
-      api.post<CreateCaseResponse>('/api/cases', payload).then((r) => r.data),
+      api.post<CreateCaseResponse>('/api/cases/intake', payload).then((r) => r.data),
     onSuccess: (data) => {
       router.push(`/cases/${data.case_id}`)
     },
@@ -161,6 +162,7 @@ export default function NursePage() {
     const payload: CreateCasePayload = {
       chief_complaint: buildChiefComplaint(),
       ...(patientStubId.trim() ? { patient_stub_id: patientStubId.trim() } : {}),
+      ...(patientName.trim() ? { patient_name: patientName.trim() } : {}),
     }
 
     mutate(payload)
