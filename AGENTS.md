@@ -1,26 +1,30 @@
 # Shadi — Agent Guide
 
-Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads patient data via FHIR R4, runs five specialist agents over a shared 70B base model with hot-swapped LoRA adapters, and produces a ranked differential diagnosis before the physician walks in.
+Multi-agent clinical diagnostic reasoning system for emergency medicine. Reads patient data via FHIR R4, runs **four** LoRA domain specialists on one shared Meditron-70B load (plus separate non-LoRA agents for intake, optional imaging, evidence, orchestrator synthesis, and safety veto), and produces a ranked differential diagnosis before the physician walks in.
 
 ---
 
 ## Architecture at a Glance
 
+**Inference split (ADR-002):** vLLM serves `meditron:70b` with four hot-swapped LoRA adapters. Ollama serves intake (Qwen), imaging (MedGemma), embeddings, safety veto (Phi), and orchestrator synthesis (DeepSeek-R1). No cloud APIs — PHI stays on the machine.
+
 ```
 EHR → FHIR MCP Server → Intake Agent → CaseObject
-                                             ↓
-                          Cardiology / Neurology / Pulmonology / Toxicology (parallel)
-                                             ↓
-                               Evidence Grounding Agent
-                                             ↓
-                                    A2A Debate Round
-                                             ↓
-                               Orchestrator → Safety Veto
-                                             ↓
-                           DiagnosticReport (FHIR) + Dashboard
+                          │    │
+                          │    └──→ Imaging Agent (MedGemma, only if attachments)
+                          ↓
+          Four LoRA specialists: Cardiology / Neurology / Pulmonology / Toxicology (parallel, vLLM)
+                          ↓
+                    Evidence Grounding Agent
+                          ↓
+                       A2A Debate Round
+                          ↓
+               Orchestrator (synthesis) → Safety Veto
+                          ↓
+              DiagnosticReport (FHIR) + Dashboard
 ```
 
-All agents share a single **Meditron-70B** base model (FP4, ~38 GB) with four LoRA adapters hot-swapped via vLLM. No cloud APIs — PHI stays on the machine.
+Only the four domain agents use LoRA on Meditron. The imaging agent is multimodal (MedGemma on Ollama), not a fifth LoRA specialist.
 
 ---
 
@@ -30,7 +34,7 @@ All agents share a single **Meditron-70B** base model (FP4, ~38 GB) with four Lo
 agents/
   base.py            # BaseAgent ABC — all agents inherit this
   intake/            # SNOMED/LOINC/RxNorm extraction → CaseObject
-  specialists/       # Cardiology, neurology, pulmonology, toxicology
+  specialists/       # Four LoRA domains + image_agent.py (MedGemma — not LoRA)
   evidence/          # PubMed + guidelines cross-reference
   safety/            # Safety veto (contraindications, allergies, meds)
   orchestrator/      # Fan-out, A2A debate, consensus synthesis

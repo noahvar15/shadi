@@ -136,7 +136,7 @@ Each track owner can begin these tasks immediately with zero cross-track depende
 - **Noah**: implement `FHIRNormalizer.bundle_to_case()` (#28) — pure Python, no services required
 - **Noah** (when #26 / #27 are in scope): add **local FHIR reference server or minimal EHR stub** (see **Planned: Local FHIR or EHR stub (#25)** below) — not a day-one blocker for agents or fixture-based tests
 - **Emmanuel**: add `router = APIRouter()` to `api/routes/cases.py` and `api/routes/reports.py` to fix the startup import crash, then wire the lifespan (#31)
-- **Joshua**: implement the six agent classes (#36) — subclass `BaseAgent`, write prompts, set `inference_url` and `model` class attributes
+- **Joshua**: implement the agent pipeline (#36) — intake, four LoRA specialists, optional imaging, evidence, orchestrator wiring, safety veto — each as `BaseAgent` subclasses with `inference_url` and `model` per ADR-002
 - **Ericsen**: run `bunx create-next-app` and scaffold the app (#41) — zero dependencies
 
 ---
