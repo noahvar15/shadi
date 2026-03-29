@@ -111,8 +111,16 @@ async def test_ensure_schema_executes_ddl() -> None:
 
     await ensure_schema(pool)
     assert conn.execute.await_count >= 2
-    ddl = str(conn.execute.await_args_list[0].args[0])
-    assert "CREATE TABLE IF NOT EXISTS cases" in ddl
+    executed = " ".join(str(c.args[0]) for c in conn.execute.await_args_list)
+    assert "CREATE TABLE IF NOT EXISTS cases" in executed
+    assert "cases_status_check" in executed
+    assert "patient_id" in executed
+    assert "cases_touch_updated_at" in executed
+
+    from api.db import VALID_CASE_STATUSES
+
+    assert "pending_enqueue" in VALID_CASE_STATUSES
+    assert "complete" in VALID_CASE_STATUSES
 
 
 @pytest.mark.asyncio

@@ -57,9 +57,9 @@ def build_triage_bundle(
             {
                 "resource": {
                     "resourceType": "Encounter",
-                    "id": encounter_id,
+                    "id": eid,
                     "status": "arrived",
-                    "subject": {"reference": f"Patient/{patient_id}"},
+                    "subject": {"reference": f"Patient/{pid}"},
                     "reasonCode": [{"text": cc}],
                 }
             },
