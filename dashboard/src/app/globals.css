@@ -5,11 +5,11 @@
 /* Theme tokens — controlled exclusively via the .dark class on <html>.
    DarkModeToggle reads system preference on mount and applies the class. */
 :root {
-  --background: #f8fafc;      /* slate-50 — off-white page bg */
-  --surface: #ffffff;          /* card/panel bg */
-  --foreground: #0f172a;       /* slate-900 */
-  --foreground-muted: #64748b; /* slate-500 */
-  --border: #e2e8f0;           /* slate-200 */
+  --background: #F4F7F4;      /* sage whisper — barely-there green tint */
+  --surface: #FAFCFA;          /* near-white card/panel with green cast */
+  --foreground: #161E15;       /* dark forest */
+  --foreground-muted: #5B7258; /* sage medium */
+  --border: #DCE6DB;           /* sage-tinted border */
   --sidebar-width: 14rem;
 }
 
@@ -21,7 +21,30 @@
   --border: #334155;           /* slate-700 */
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease forwards;
+  }
 }

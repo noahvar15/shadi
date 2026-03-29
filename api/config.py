@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     api_secret_key: str = Field(..., validation_alias="API_SECRET_KEY")
     # DEP-1 (cross-track-dependencies): use until Noah #28 contract is merged in your fork
     stub_case_intake: bool = Field(default=False, validation_alias="SHADI_STUB_CASE_INTAKE")
+    stub_patient_search: bool = Field(default=False, alias="SHADI_STUB_PATIENT_SEARCH")
 
     @field_validator("api_secret_key", mode="after")
     @classmethod

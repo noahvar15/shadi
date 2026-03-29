@@ -8,8 +8,8 @@ const config: Config = {
       colors: {
         // Primary accent — violet/purple
         primary: {
-          DEFAULT: '#7c3aed', // violet-600
-          dark: '#a78bfa',    // violet-400
+          DEFAULT: '#10b981', // emerald-500
+          dark: '#34d399',    // emerald-400
           foreground: '#ffffff',
         },
         // Danger — safety veto, errors
@@ -26,7 +26,7 @@ const config: Config = {
         },
         // Confidence bars (high)
         confidence: {
-          high: '#7c3aed',   // violet — same as primary
+          high: '#10b981',   // emerald-500 — high confidence
           mid: '#f59e0b',    // amber
           low: '#94a3b8',    // slate-400
         },

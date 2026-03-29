@@ -1,133 +1,190 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import Link from 'next/link'
-import { Stethoscope, FolderPlus } from 'lucide-react'
-import { api } from '@/lib/api'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Stethoscope, ClipboardList, ArrowRight, ArrowLeft } from 'lucide-react'
+import { DarkModeToggle } from '@/components/DarkModeToggle'
 
-interface Case {
-  case_id: string
-  patient_id: string
-  status: 'complete' | 'running' | 'queued'
-  created_at: string
-}
+type Role = 'nurse' | 'doctor'
+type Step = 'select' | 'login'
 
-const STATUS_STYLES: Record<Case['status'], string> = {
-  complete: 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
-  running:  'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  queued:   'bg-slate-100 text-slate-500 dark:bg-slate-700/50 dark:text-slate-400',
-}
+export default function RolePage() {
+  const router = useRouter()
+  const [step, setStep] = useState<Step>('select')
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
-function SkeletonCard() {
-  return (
-    <div className="bg-[var(--surface)] rounded-[1rem] shadow-card p-4">
-      <div className="animate-pulse space-y-2">
-        <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded w-2/5" />
-        <div className="h-3 bg-slate-100 dark:bg-slate-700/60 rounded w-1/4" />
-      </div>
-    </div>
-  )
-}
+  function selectRole(role: Role) {
+    setSelectedRole(role)
+    setStep('login')
+    setError(null)
+    setUsername('')
+    setPassword('')
+  }
 
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-32 text-center">
-      <div className="h-16 w-16 rounded-2xl bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center mb-5">
-        <Stethoscope className="w-7 h-7 text-violet-500 dark:text-violet-400" />
-      </div>
-      <h2 className="text-base font-semibold text-[var(--foreground)] mb-1">
-        No cases yet
-      </h2>
-      <p className="text-sm text-[var(--foreground-muted)] mb-6 max-w-xs">
-        Submit a new patient case to begin diagnostic reasoning.
-      </p>
-      <Link
-        href="/cases/new"
-        className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-600 text-white text-sm font-medium rounded-lg transition-colors"
-      >
-        <FolderPlus size={15} />
-        New Case
-      </Link>
-    </div>
-  )
-}
+  function handleBack() {
+    setStep('select')
+    setSelectedRole(null)
+    setUsername('')
+    setPassword('')
+    setError(null)
+  }
 
-function CaseCard({ c }: { c: Case }) {
-  return (
-    <Link
-      href={`/cases/${c.case_id}`}
-      className="block p-4 bg-[var(--surface)] rounded-[1rem] shadow-card hover:shadow-card-hover transition-shadow"
-    >
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-mono font-medium text-[var(--foreground)] truncate">
-            {c.case_id}
-          </p>
-          <p className="text-xs text-[var(--foreground-muted)] mt-0.5">
-            Patient {c.patient_id}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[c.status]}`}>
-            {c.status}
-          </span>
-          <span className="text-xs text-[var(--foreground-muted)] font-mono">
-            {new Date(c.created_at).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-            })}
-          </span>
-        </div>
-      </div>
-    </Link>
-  )
-}
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
 
-export default function HomePage() {
-  const { data, isLoading, error } = useQuery<Case[]>({
-    queryKey: ['cases'],
-    queryFn: () => api.get<Case[]>('/cases').then((r) => r.data),
-  })
+    if (!username.trim() || !password) {
+      setError('Username and password are required.')
+      return
+    }
+
+    localStorage.setItem(
+      'shadi_session',
+      JSON.stringify({ role: selectedRole, name: username.trim() })
+    )
+    router.push(selectedRole === 'nurse' ? '/nurse' : '/doctor')
+  }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-[var(--foreground)]">Active Cases</h1>
-          <p className="text-sm text-[var(--foreground-muted)] mt-0.5">
-            Diagnostic reasoning queue
-          </p>
-        </div>
-        <Link
-          href="/cases/new"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-600 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          <FolderPlus size={15} />
-          New Case
-        </Link>
+    <div className="relative min-h-full flex flex-col items-center justify-center px-6 py-16">
+      <div className="absolute top-4 right-4">
+        <DarkModeToggle />
       </div>
+      {step === 'select' && (
+        <div className="w-full animate-fade-in">
+          <div className="mb-10 text-center">
+            <div className="inline-flex items-center gap-2 mb-3">
+              <Stethoscope size={28} className="text-emerald-500 dark:text-emerald-400" strokeWidth={1.5} />
+              <span className="text-3xl font-bold text-[var(--foreground)] tracking-tight">Shadi</span>
+            </div>
+            <p className="text-sm text-[var(--foreground-muted)]">Clinical diagnostic assistant — select your role to continue</p>
+          </div>
 
-      {isLoading && (
-        <div className="space-y-3">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-2xl mx-auto">
+            <button
+              onClick={() => selectRole('nurse')}
+              className="group flex flex-col gap-4 p-8 bg-[var(--surface)] border border-[var(--border)] rounded-card shadow-card hover:shadow-card-hover hover:border-emerald-400 dark:hover:border-emerald-500 transition-all duration-200 text-left"
+            >
+              <div className="flex items-start justify-between">
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/30">
+                  <Stethoscope size={40} className="text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
+                </div>
+                <ArrowRight
+                  size={18}
+                  className="text-[var(--foreground-muted)] opacity-0 group-hover:opacity-100 translate-x-[-4px] group-hover:translate-x-0 transition-all duration-200 mt-1"
+                />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-[var(--foreground)]">I&apos;m a Nurse</h2>
+                <p className="text-sm text-[var(--foreground-muted)] mt-1">
+                  Enter triage notes for a new patient
+                </p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => selectRole('doctor')}
+              className="group flex flex-col gap-4 p-8 bg-[var(--surface)] border border-[var(--border)] rounded-card shadow-card hover:shadow-card-hover hover:border-emerald-400 dark:hover:border-emerald-500 transition-all duration-200 text-left"
+            >
+              <div className="flex items-start justify-between">
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/30">
+                  <ClipboardList size={40} className="text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
+                </div>
+                <ArrowRight
+                  size={18}
+                  className="text-[var(--foreground-muted)] opacity-0 group-hover:opacity-100 translate-x-[-4px] group-hover:translate-x-0 transition-all duration-200 mt-1"
+                />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-[var(--foreground)]">I&apos;m a Doctor</h2>
+                <p className="text-sm text-[var(--foreground-muted)] mt-1">
+                  Review active cases and AI diagnostic reports
+                </p>
+              </div>
+            </button>
+          </div>
         </div>
       )}
 
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/50 text-red-600 dark:text-red-400 text-sm">
-          Failed to load cases. The API may be unavailable.
-        </div>
-      )}
+      {step === 'login' && selectedRole && (
+        <div className="w-full max-w-sm mx-auto animate-fade-in">
+          <button
+            onClick={handleBack}
+            className="inline-flex items-center gap-1 text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors mb-6"
+          >
+            <ArrowLeft size={14} />
+            Back
+          </button>
 
-      {!isLoading && !error && data && data.length === 0 && <EmptyState />}
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-card shadow-card p-8">
+            <div className="mb-6 text-center">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800/50 mb-4">
+                {selectedRole === 'nurse' ? (
+                  <Stethoscope size={13} className="text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <ClipboardList size={13} className="text-emerald-600 dark:text-emerald-400" />
+                )}
+                <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300 capitalize">
+                  Logging in as {selectedRole}
+                </span>
+              </div>
+              <h1 className="text-xl font-bold text-[var(--foreground)]">Sign In</h1>
+            </div>
 
-      {!isLoading && !error && data && data.length > 0 && (
-        <div className="space-y-2.5">
-          {data.map((c) => (
-            <CaseCard key={c.case_id} c={c} />
-          ))}
+            <form onSubmit={handleSubmit} noValidate className="space-y-4">
+              <div className="space-y-1.5">
+                <label htmlFor="username" className="block text-sm font-medium text-[var(--foreground)]">
+                  Username <span className="text-red-500" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="username"
+                  type="text"
+                  required
+                  autoFocus
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+                  placeholder="Enter your username"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="password" className="block text-sm font-medium text-[var(--foreground)]">
+                  Password <span className="text-red-500" aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+                  placeholder="Enter your password"
+                />
+              </div>
+
+              {error && (
+                <div
+                  role="alert"
+                  className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm"
+                >
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-lg transition-colors mt-2"
+              >
+                Sign In as {selectedRole === 'nurse' ? 'Nurse' : 'Doctor'}
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>
