@@ -26,6 +26,7 @@ from fhir.resources.observation import Observation as FHIRObservation
 
 from agents.schemas import Allergy, CaseObject, ClinicalCode, Medication, Observation
 from shadi_fhir.exceptions import FHIRValidationError
+from shadi_fhir.triage_bundle import LOINC_TRIAGE_NARRATIVE
 
 logger = structlog.get_logger()
 
@@ -246,6 +247,17 @@ def _build_allergy(
     )
 
 
+def _is_loinc_triage_narrative_observation(res: dict[str, Any]) -> bool:
+    """LOINC 34109-9 — full triage / HPI text in ``valueString`` (issue #70)."""
+    code = res.get("code")
+    if not isinstance(code, dict):
+        return False
+    for c in code.get("coding") or []:
+        if isinstance(c, dict) and c.get("code") == LOINC_TRIAGE_NARRATIVE:
+            return True
+    return False
+
+
 def _allergy_from_dict_r4(res: dict[str, Any]) -> Allergy | None:
     code = res.get("code")
     if not isinstance(code, dict):
@@ -335,6 +347,7 @@ class FHIRNormalizer:
         sex: str | None = None
         encounter_id: str | None = None
         chief_complaint: str | None = None
+        triage_notes_raw: str = ""
         conditions: list[ClinicalCode] = []
         observations: list[Observation] = []
         medications: list[Medication] = []
@@ -361,6 +374,11 @@ class FHIRNormalizer:
                 if cc:
                     conditions.append(cc)
             elif rtype == "Observation":
+                if _is_loinc_triage_narrative_observation(res):
+                    vs = res.get("valueString")
+                    if isinstance(vs, str) and vs.strip():
+                        triage_notes_raw = vs.strip()
+                    continue
                 obs = _observation_from_dict_r4(res)
                 if obs:
                     observations.append(obs)
@@ -382,7 +400,7 @@ class FHIRNormalizer:
             patient_id=patient_id,
             encounter_id=encounter_id,
             chief_complaint=chief_complaint or "",
-            triage_notes_raw="",
+            triage_notes_raw=triage_notes_raw,
             conditions=conditions,
             observations=observations,
             medications=medications,
